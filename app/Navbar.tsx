@@ -1,23 +1,26 @@
 import Link from 'next/link';
-import { Home, LogOut, ChevronDown } from 'lucide-react';
+import Image from 'next/image';
+import { Bell, ChevronDown } from 'lucide-react';
 
 export function Navbar() {
     return (
         <nav className="h-16 bg-[#001A72] flex items-center justify-between px-4 sm:px-8 text-white sticky top-0 z-50 shadow-md">
             <div className="flex items-center gap-6 sm:gap-10">
 
-                {/* Fake Logo aligned with target */}
-                <div className="flex items-center gap-3">
-                    <div className="bg-white rounded px-2 py-1 flex items-center justify-center">
-                        {/* Extremely simple CSS shape to mimic logo */}
-                        <div className="w-8 h-6 relative flex items-end justify-center">
-                            <div className="w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-b-[16px] border-b-orange-500"></div>
-                            <div className="absolute bottom-[-4px] w-full text-[6px] font-bold text-blue-900 text-center uppercase tracking-tighter">Hospital</div>
+                {/* Logo Area */}
+                <div className="flex items-center">
+                    <Link href="/">
+                        <div className="bg-white/95 px-3 py-1.5 rounded-md flex items-center justify-center">
+                            <Image
+                                src="/images/logo.png"
+                                alt="Hospital Casa Logo"
+                                width={120}
+                                height={32}
+                                priority
+                                className="h-8 w-auto object-contain"
+                            />
                         </div>
-                    </div>
-                    <span className="font-semibold text-lg tracking-tight hidden sm:block">
-                        RHC Financeiro
-                    </span>
+                    </Link>
                 </div>
 
                 {/* Desktop Navigation */}
