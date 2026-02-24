@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Search } from 'lucide-react';
 
 export default function Home() {
   const [pedidoId, setPedidoId] = useState('');
@@ -15,24 +16,24 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Sistema de Pedidos Hospitalares
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-600">
-          Busque as informações de um pedido específico
-        </p>
+    <div className="max-w-7xl mx-auto space-y-6">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-slate-800">Dashboard</h1>
+        <p className="text-slate-500 mt-1">Visão geral e acesso rápido</p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-          <form className="space-y-6" onSubmit={handleSubmit}>
-            <div>
-              <label htmlFor="pedidoId" className="block text-sm font-medium text-gray-700">
-                ID do Pedido
-              </label>
-              <div className="mt-1">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden flex flex-col h-full">
+          <div className="p-6 flex-1">
+            <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <Search className="w-5 h-5 text-orange-500" />
+              Buscar Pedido
+            </h2>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="pedidoId" className="block text-sm font-medium text-slate-600 mb-1">
+                  ID do Pedido
+                </label>
                 <input
                   id="pedidoId"
                   name="pedidoId"
@@ -40,21 +41,21 @@ export default function Home() {
                   required
                   value={pedidoId}
                   onChange={(e) => setPedidoId(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  className="appearance-none block w-full px-3 py-2 border border-slate-200 rounded-lg shadow-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#001A72] focus:border-transparent sm:text-sm"
                   placeholder="Ex: 123"
                 />
               </div>
-            </div>
-
-            <div>
               <button
                 type="submit"
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-[#001A72] hover:bg-[#001250] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#001A72] transition-colors"
               >
-                Buscar Pedido
+                Buscar
               </button>
-            </div>
-          </form>
+            </form>
+          </div>
+          <div className="bg-orange-50 px-6 py-2 border-t border-orange-100">
+            <span className="text-[10px] font-bold text-orange-600 uppercase tracking-wider">Acesso Rápido</span>
+          </div>
         </div>
       </div>
     </div>
