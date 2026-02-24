@@ -22,7 +22,8 @@ export default async function OrderDetailsPage({ params }: { params: { id: strin
         .eq('id', id)
         .single();
 
-    if (!orderError && supabaseOrder) {
+    // If we have a valid order from Supabase, load its items
+    if (supabaseOrder && !orderError) {
         order = supabaseOrder;
 
         // Fetch the items for this order from Supabase
@@ -36,8 +37,9 @@ export default async function OrderDetailsPage({ params }: { params: { id: strin
             .eq('pedido_id', id);
 
         orderItems = supabaseItems || [];
-    } else {
-        // 2. Fallback to Mock Data lookup
+    }
+    // 2. If Supabase failed (e.g., row not found or network error), fallback to Mock Data
+    else {
         const foundMockOrder = mockPedidos.find(p => p.id === id);
         if (foundMockOrder) {
             order = foundMockOrder;
@@ -59,7 +61,7 @@ export default async function OrderDetailsPage({ params }: { params: { id: strin
                 };
             });
         } else {
-            return <div className="text-red-500 p-8 text-center font-bold">Erro ao carregar o pedido. O pedido não foi encontrado no banco nem nos dados locais.</div>;
+            return <div className="text-red-500 p-8 text-center font-bold bg-white rounded-xl shadow-sm border border-red-100 m-8">Erro ao carregar o pedido. O pedido #{id} não foi encontrado no banco de dados principal nem nos dados locais de teste.</div>;
         }
     }
 
