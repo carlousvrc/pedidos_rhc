@@ -20,31 +20,31 @@ export function Navbar() {
                     </span>
                 </div>
 
-                {/* Navigation Links */}
-                <div className="hidden md:flex gap-1 items-center">
+                {/* Desktop Navigation */}
+                <div className="hidden md:flex items-center gap-1 lg:gap-2 ml-4 lg:ml-8">
                     <Link
                         href="/"
-                        className="px-4 py-2 rounded-md bg-[#001250] text-sm font-medium transition-colors hover:bg-[#001250]/80"
+                        className="px-4 py-2 rounded-md text-sm font-medium text-white transition-colors bg-[#001250]"
                     >
                         Dashboard
                     </Link>
                     <Link
-                        href="#"
-                        className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250]"
+                        href="/dashboard/pedidos/novo"
+                        className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
                     >
-                        Lançamentos
+                        Novo Pedido
                     </Link>
                     <Link
                         href="#"
-                        className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250]"
+                        className="px-4 py-2 rounded-md text-sm font-medium text-white/50 cursor-not-allowed"
                     >
-                        Fornecedores
+                        Histórico
                     </Link>
                     <Link
                         href="#"
-                        className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250]"
+                        className="px-4 py-2 rounded-md text-sm font-medium text-white/50 cursor-not-allowed"
                     >
-                        Empresas
+                        Relatórios
                     </Link>
                 </div>
             </div>
