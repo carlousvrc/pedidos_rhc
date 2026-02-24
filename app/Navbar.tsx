@@ -41,14 +41,14 @@ export function Navbar() {
                         Novo Pedido
                     </Link>
                     <Link
-                        href="#"
-                        className="px-4 py-2 rounded-md text-sm font-medium text-white/50 cursor-not-allowed"
+                        href="/dashboard/historico"
+                        className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
                     >
                         Histórico
                     </Link>
                     <Link
-                        href="#"
-                        className="px-4 py-2 rounded-md text-sm font-medium text-white/50 cursor-not-allowed"
+                        href="/dashboard/relatorios"
+                        className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
                     >
                         Relatórios
                     </Link>
