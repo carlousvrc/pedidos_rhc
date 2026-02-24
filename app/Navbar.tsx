@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
-import { Bell, ChevronDown } from 'lucide-react';
+import { Bell, ChevronDown, LogOut } from 'lucide-react';
+import { logoutUser } from './login/actions';
 
 export function Navbar() {
     return (
@@ -52,20 +53,28 @@ export function Navbar() {
                     >
                         Relatórios
                     </Link>
+                    <Link
+                        href="/dashboard/usuarios"
+                        className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
+                    >
+                        Usuários
+                    </Link>
                 </div>
             </div>
 
             {/* User Profile Right Side */}
             <div className="flex items-center">
-                <button className="flex items-center gap-3 bg-[#001250] hover:bg-[#001250]/80 transition-colors rounded-full py-1.5 px-2 sm:pr-4">
-                    <div className="bg-orange-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">
-                        A
-                    </div>
-                    <div className="hidden sm:flex items-center gap-2">
-                        <span className="text-sm font-medium">Administrador</span>
-                        <ChevronDown className="w-4 h-4 text-white/70" />
-                    </div>
-                </button>
+                <form action={logoutUser}>
+                    <button type="submit" className="flex items-center gap-3 bg-[#001250] hover:bg-[#001250]/80 transition-colors rounded-full py-1.5 px-2 sm:pr-4 group" title="Sair do sistema">
+                        <div className="bg-orange-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">
+                            A
+                        </div>
+                        <div className="hidden sm:flex items-center gap-2">
+                            <span className="text-sm font-medium">Administrador</span>
+                            <LogOut className="w-4 h-4 text-white/70 group-hover:text-red-400 transition-colors" />
+                        </div>
+                    </button>
+                </form>
             </div>
         </nav>
     );

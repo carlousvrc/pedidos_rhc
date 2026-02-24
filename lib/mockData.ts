@@ -79,3 +79,22 @@ export const mockPedidosItens = [
     { id: 'pi4', pedido_id: 'p2', item_id: 'i4', quantidade: 2 },
     { id: 'pi5', pedido_id: 'p3', item_id: 'i8', quantidade: 20 },
 ];
+
+export const mockUsuarios = [
+    {
+        id: 'usr1',
+        username: 'admin',
+        password_hash: 'Rc2026#@', // For testing purposes in plaintext
+        nome: 'Administrador do Sistema',
+        role: 'admin',
+        created_at: new Date().toISOString()
+    },
+    {
+        id: 'usr2',
+        username: 'enfermagem.cti',
+        password_hash: 'senha123',
+        nome: 'Enfermagem CTI',
+        role: 'user',
+        created_at: new Date().toISOString()
+    }
+];
