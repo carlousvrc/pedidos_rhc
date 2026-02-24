@@ -10,16 +10,18 @@ export function Navbar() {
                 {/* Logo Area */}
                 <div className="flex items-center">
                     <Link href="/" className="flex items-center gap-3 transition-opacity hover:opacity-90">
-                        <Image
-                            src="/logo.png"
-                            alt="Hospital Casa Logo"
-                            width={160}
-                            height={48}
-                            priority
-                            className="h-10 w-auto object-contain"
-                        />
+                        <div className="bg-white rounded-lg px-2 py-1 flex items-center justify-center">
+                            <Image
+                                src="/logo.png"
+                                alt="Hospital Casa Logo"
+                                width={120}
+                                height={36}
+                                priority
+                                className="h-9 w-auto object-contain"
+                            />
+                        </div>
                         <span className="text-xl font-bold text-white tracking-tight hidden sm:block">
-                            RHC-Pedidos
+                            RHC-Pedido
                         </span>
                     </Link>
                 </div>
