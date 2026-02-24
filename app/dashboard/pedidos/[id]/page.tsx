@@ -3,44 +3,64 @@ import { supabase } from '@/lib/supabase';
 import { ExportCsvButton } from './ExportCsvButton';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
+import { mockPedidos, mockPedidosItens, mockItens } from '@/lib/mockData';
 
 export default async function OrderDetailsPage({ params }: { params: { id: string } }) {
     const { id } = params;
 
-    // Fetch the order from Supabase
-    const { data: order, error: orderError } = await supabase
+    let order: any = null;
+    let orderItems: any[] = [];
+    let isMock = false;
+
+    // 1. Try Fetching the order from Supabase
+    const { data: supabaseOrder, error: orderError } = await supabase
         .from('pedidos')
         .select(`
-    *,
-    unidades(
-        nome
-    )
+            *,
+            unidades(nome)
         `)
         .eq('id', id)
         .single();
 
-    if (orderError || !order) {
-        console.error('Error fetching order:', orderError);
-        return <div className="text-red-500">Erro ao carregar o pedido.</div>;
-    }
+    if (!orderError && supabaseOrder) {
+        order = supabaseOrder;
 
-    // Fetch the items for this order
-    const { data: orderItems, error: itemsError } = await supabase
-        .from('pedidos_itens')
-        .select(`
-id,
-    quantidade,
-    itens(
-        codigo,
-        referencia,
-        nome
-    )
-        `)
-        .eq('pedido_id', id);
+        // Fetch the items for this order from Supabase
+        const { data: supabaseItems } = await supabase
+            .from('pedidos_itens')
+            .select(`
+                id,
+                quantidade,
+                itens(codigo, referencia, nome)
+            `)
+            .eq('pedido_id', id);
 
-    if (itemsError) {
-        console.error('Error fetching order items:', itemsError);
-        return <div className="text-red-500">Erro ao carregar os itens do pedido.</div>;
+        orderItems = supabaseItems || [];
+    } else {
+        // 2. Fallback to Mock Data lookup
+        const foundMockOrder = mockPedidos.find(p => p.id === id);
+        if (foundMockOrder) {
+            order = foundMockOrder;
+            isMock = true;
+
+            const foundMockItems = mockPedidosItens.filter(pi => pi.pedido_id === id);
+
+            // Map the mock item IDs to their full representations mimicking the join
+            orderItems = foundMockItems.map(pi => {
+                const itemRef = mockItens.find(i => i.id === pi.item_id);
+                return {
+                    id: pi.id,
+                    quantidade: pi.quantidade,
+                    itens: {
+                        codigo: itemRef?.codigo || '',
+                        referencia: itemRef?.referencia || '',
+                        nome: itemRef?.nome || ''
+                    }
+                };
+            });
+        } else {
+            return <div className="text-red-500 p-8 text-center font-bold">Erro ao carregar o pedido. O pedido não foi encontrado no banco nem nos dados locais.</div>;
+        }
     }
 
     const formattedDate = new Date(order.data_pedido).toLocaleDateString('pt-BR');

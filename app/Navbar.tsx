@@ -21,7 +21,7 @@ export function Navbar() {
                             />
                         </div>
                         <span className="text-xl font-bold text-white tracking-tight hidden sm:block">
-                            RHC-Pedido
+                            RHC Pedidos
                         </span>
                     </Link>
                 </div>

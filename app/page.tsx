@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { mockPedidos } from '@/lib/mockData';
 import Link from 'next/link';
 import { FileText, Clock, CheckCircle, Plus } from 'lucide-react';
 
@@ -22,7 +23,8 @@ export default async function Home() {
     console.error('Error fetching pedidos:', error);
   }
 
-  const pedidosList = (pedidos as any[]) || [];
+  // Fallback to mock data if empty or error (for testing layout)
+  const pedidosList = (pedidos && pedidos.length > 0) ? (pedidos as any[]) : mockPedidos;
 
   // Summary Metrics
   const totalPedidos = pedidosList.length;

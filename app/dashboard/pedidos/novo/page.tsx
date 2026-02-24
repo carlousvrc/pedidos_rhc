@@ -6,6 +6,8 @@ import { supabase } from '@/lib/supabase';
 import { Plus, Search, Trash2, ArrowLeft, Save } from 'lucide-react';
 import Link from 'next/link';
 
+import { mockItens, mockUnidades } from '@/lib/mockData';
+
 export default function NovoPedidoPage() {
     const router = useRouter();
 
@@ -27,14 +29,24 @@ export default function NovoPedidoPage() {
                 .from('unidades')
                 .select('*')
                 .order('nome');
-            if (unidadesData) setUnidades(unidadesData);
+
+            if (unidadesData && unidadesData.length > 0) {
+                setUnidades(unidadesData);
+            } else {
+                setUnidades(mockUnidades);
+            }
 
             // Fetch itens
             const { data: itensData } = await supabase
                 .from('itens')
                 .select('*')
                 .order('nome');
-            if (itensData) setItens(itensData);
+
+            if (itensData && itensData.length > 0) {
+                setItens(itensData);
+            } else {
+                setItens(mockItens);
+            }
         }
         fetchInitialData();
     }, []);

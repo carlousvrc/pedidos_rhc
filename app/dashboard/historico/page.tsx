@@ -1,11 +1,26 @@
 'use client';
 
-import { History, ArrowLeft, Search, Calendar } from 'lucide-react';
+import { History, ArrowLeft, Search, Calendar, FileText } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
+import { mockPedidos } from '@/lib/mockData';
 
 export default function HistoricoPage() {
     const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredPedidos = mockPedidos.filter(p =>
+        p.numero_pedido.includes(searchTerm) ||
+        p.unidades.nome.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const getStatusBadge = (status: string) => {
+        switch (status?.toLowerCase()) {
+            case 'pendente': return 'bg-orange-100 text-orange-800';
+            case 'atendido': return 'bg-green-100 text-green-800';
+            case 'cancelado': return 'bg-red-100 text-red-800';
+            default: return 'bg-blue-100 text-[#001A72]';
+        }
+    };
 
     return (
         <div className="max-w-[1400px] mx-auto space-y-6">
@@ -39,15 +54,68 @@ export default function HistoricoPage() {
                     </button>
                 </div>
 
-                {/* Placeholder List */}
-                <div className="p-12 flex flex-col items-center justify-center text-center">
-                    <div className="bg-slate-50 text-slate-400 p-4 rounded-full mb-4">
-                        <History className="w-8 h-8" />
-                    </div>
-                    <h3 className="text-lg font-bold text-slate-700 mb-2">Histórico em Desenvolvimento</h3>
-                    <p className="text-slate-500 max-w-sm">
-                        A página de busca avançada e filtro temporal para solicitações está sendo implementada nas tabelas baseadas no Supabase.
-                    </p>
+                {/* Data Table */}
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-slate-100">
+                        <thead className="bg-slate-50">
+                            <tr>
+                                <th scope="col" className="px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                    Nº Pedido
+                                </th>
+                                <th scope="col" className="px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                    Unidade
+                                </th>
+                                <th scope="col" className="px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                    Data
+                                </th>
+                                <th scope="col" className="px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                    Status
+                                </th>
+                                <th scope="col" className="px-6 py-3.5 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                    Ações
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-slate-100">
+                            {filteredPedidos.length === 0 ? (
+                                <tr>
+                                    <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                                        Nenhum pedido encontrado.
+                                    </td>
+                                </tr>
+                            ) : (
+                                filteredPedidos.map((pedido) => (
+                                    <tr key={pedido.id} className="hover:bg-slate-50/50 transition-colors group">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
+                                            <Link href={`/dashboard/pedidos/${pedido.id}`} className="hover:text-[#001A72] flex items-center gap-2">
+                                                <FileText className="w-4 h-4 text-slate-400 group-hover:text-[#001A72]" />
+                                                #{pedido.numero_pedido}
+                                            </Link>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
+                                            {pedido.unidades?.nome || 'Não informada'}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                            {new Date(pedido.data_pedido).toLocaleDateString('pt-BR')}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <span className={`px-2.5 py-0.5 inline-flex text-[11px] leading-5 font-semibold rounded-full capitalize ${getStatusBadge(pedido.status)}`}>
+                                                {pedido.status}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            <Link
+                                                href={`/dashboard/pedidos/${pedido.id}`}
+                                                className="text-[#001A72] hover:text-[#001250] bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-md transition-colors"
+                                            >
+                                                Visualizar
+                                            </Link>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
