@@ -42,6 +42,12 @@ export function Navbar() {
                         Novo Pedido
                     </Link>
                     <Link
+                        href="/dashboard/bionexo"
+                        className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
+                    >
+                        Bionexo
+                    </Link>
+                    <Link
                         href="/dashboard/historico"
                         className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
                     >
