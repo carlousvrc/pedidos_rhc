@@ -1,129 +1,134 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Plus, Search, Trash2, ArrowLeft, Save } from 'lucide-react';
+import { Plus, Search, Trash2, ArrowLeft, Save, Check, Package } from 'lucide-react';
 import Link from 'next/link';
-
 import { mockItens, mockUnidades } from '@/lib/mockData';
+
+const TIPOS = [
+    'B.BRAUN',
+    'FRALDAS',
+    'LIFETEX-SURGITEXTIL',
+    'MAT. MED. HOSPITALAR',
+    'MED. ONCO',
+    'MED. ONCO CONTR. LIBBS.',
+    'MEDICAMENTOS',
+];
+
+const TIPO_COLORS: Record<string, string> = {
+    'B.BRAUN': 'bg-blue-100 text-blue-800',
+    'FRALDAS': 'bg-green-100 text-green-800',
+    'LIFETEX-SURGITEXTIL': 'bg-orange-100 text-orange-800',
+    'MAT. MED. HOSPITALAR': 'bg-slate-100 text-slate-700',
+    'MED. ONCO': 'bg-red-100 text-red-800',
+    'MED. ONCO CONTR. LIBBS.': 'bg-purple-100 text-purple-800',
+    'MEDICAMENTOS': 'bg-teal-100 text-teal-800',
+};
 
 export default function NovoPedidoPage() {
     const router = useRouter();
 
-    // States for form data
     const [unidades, setUnidades] = useState<any[]>([]);
     const [itens, setItens] = useState<any[]>([]);
 
     const [selectedUnidade, setSelectedUnidade] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
+    const [tipoFiltro, setTipoFiltro] = useState('');
+    const [showDropdown, setShowDropdown] = useState(false);
     const [selectedItens, setSelectedItens] = useState<any[]>([]);
-
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Load Data
+    const searchRef = useRef<HTMLDivElement>(null);
+
     useEffect(() => {
         async function fetchInitialData() {
-            // Fetch unidades
-            const { data: unidadesData } = await supabase
-                .from('unidades')
-                .select('*')
-                .order('nome');
+            const { data: unidadesData } = await supabase.from('unidades').select('*').order('nome');
+            setUnidades(unidadesData?.length ? unidadesData : mockUnidades);
 
-            if (unidadesData && unidadesData.length > 0) {
-                setUnidades(unidadesData);
-            } else {
-                setUnidades(mockUnidades);
-            }
-
-            // Fetch itens
-            const { data: itensData } = await supabase
-                .from('itens')
-                .select('*')
-                .order('nome');
-
-            if (itensData && itensData.length > 0) {
-                setItens(itensData);
-            } else {
-                setItens(mockItens);
-            }
+            const { data: itensData } = await supabase.from('itens').select('*').order('nome');
+            setItens(itensData?.length ? itensData : mockItens);
         }
         fetchInitialData();
     }, []);
 
-    // Filter items based on search
-    const filteredItens = itens.filter(item =>
-        item.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.codigo.toLowerCase().includes(searchTerm.toLowerCase())
-    ).slice(0, 5); // Limit to top 5 for quick select
-
-    // Add item to cart
-    const addItem = (item: any) => {
-        if (!selectedItens.find(i => i.id === item.id)) {
-            setSelectedItens([...selectedItens, { ...item, quantidade: 1 }]);
+    // Close dropdown on outside click
+    useEffect(() => {
+        function handleClickOutside(e: MouseEvent) {
+            if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+                setShowDropdown(false);
+            }
         }
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const selectedIds = useMemo(() => new Set(selectedItens.map(i => i.id)), [selectedItens]);
+
+    const filteredItens = useMemo(() => {
+        const term = searchTerm.toLowerCase();
+        return itens.filter(item => {
+            const matchTipo = !tipoFiltro || item.tipo === tipoFiltro;
+            const matchSearch =
+                !term ||
+                item.nome.toLowerCase().includes(term) ||
+                item.codigo.toString().includes(term) ||
+                (item.referencia && item.referencia.toString().toLowerCase().includes(term));
+            return matchTipo && matchSearch;
+        }).slice(0, 12);
+    }, [itens, searchTerm, tipoFiltro]);
+
+    const addItem = (item: any) => {
+        if (!selectedIds.has(item.id)) {
+            setSelectedItens(prev => [...prev, { ...item, quantidade: 1 }]);
+        }
+        setSearchTerm('');
+        setShowDropdown(false);
     };
 
-    // Remove item from cart
-    const removeItem = (id: string) => {
-        setSelectedItens(selectedItens.filter(i => i.id !== id));
-    };
+    const removeItem = (id: string) => setSelectedItens(prev => prev.filter(i => i.id !== id));
 
-    // Update quantity
     const updateQuantity = (id: string, qty: number) => {
         if (qty < 1) return;
-        setSelectedItens(selectedItens.map(i => i.id === id ? { ...i, quantidade: qty } : i));
+        setSelectedItens(prev => prev.map(i => i.id === id ? { ...i, quantidade: qty } : i));
     };
 
-    // Handle Submit
+    const handleQtyInput = (id: string, value: string) => {
+        const qty = parseInt(value);
+        if (!isNaN(qty) && qty >= 1) updateQuantity(id, qty);
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedUnidade || selectedItens.length === 0) {
             alert('Selecione uma unidade e pelo menos um item.');
             return;
         }
-
         setIsSubmitting(true);
-
         try {
-            // 1. Create the Order (Pedido)
-            const numeroPedido = Math.floor(100000 + Math.random() * 900000).toString(); // Simple random generator for example
-
+            const numeroPedido = Math.floor(100000 + Math.random() * 900000).toString();
             const { data: newOrder, error: orderError } = await supabase
                 .from('pedidos')
-                .insert({
-                    numero_pedido: numeroPedido,
-                    unidade_id: selectedUnidade,
-                    status: 'Pendente',
-                    data_pedido: new Date().toISOString()
-                })
+                .insert({ numero_pedido: numeroPedido, unidade_id: selectedUnidade, status: 'Pendente', data_pedido: new Date().toISOString() })
                 .select()
                 .single();
-
             if (orderError) throw orderError;
-
-            // 2. Insert Items (Pedidos_Itens)
-            const pedidoItensToInsert = selectedItens.map(item => ({
-                pedido_id: newOrder.id,
-                item_id: item.id,
-                quantidade: item.quantidade
-            }));
 
             const { error: itemsError } = await supabase
                 .from('pedidos_itens')
-                .insert(pedidoItensToInsert);
-
+                .insert(selectedItens.map(item => ({ pedido_id: newOrder.id, item_id: item.id, quantidade: item.quantidade })));
             if (itemsError) throw itemsError;
 
-            // Success
             router.push(`/dashboard/pedidos/${newOrder.id}`);
-
         } catch (error) {
             console.error('Error submitting order:', error);
             alert('Erro ao salvar o pedido. Tente novamente.');
             setIsSubmitting(false);
         }
     };
+
+    const totalUnidades = selectedItens.reduce((acc, i) => acc + i.quantidade, 0);
 
     return (
         <div className="max-w-[1400px] mx-auto space-y-6">
@@ -141,10 +146,10 @@ export default function NovoPedidoPage() {
 
             <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-                {/* Left Column: Form Fields */}
+                {/* Left Column */}
                 <div className="lg:col-span-2 space-y-6">
 
-                    {/* General Data Card */}
+                    {/* Dados Gerais */}
                     <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
                         <div className="px-6 py-5 border-b border-slate-100">
                             <h2 className="text-lg font-bold text-slate-800">Dados Gerais</h2>
@@ -168,84 +173,147 @@ export default function NovoPedidoPage() {
                         </div>
                     </div>
 
-                    {/* Add Items Card */}
+                    {/* Adicionar Itens */}
                     <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                        <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                        <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/50">
                             <h2 className="text-lg font-bold text-slate-800">Adicionar Itens</h2>
+                            <p className="text-xs text-slate-500 mt-0.5">{itens.length.toLocaleString('pt-BR')} itens disponíveis no catálogo</p>
                         </div>
 
                         <div className="p-6 space-y-6">
-                            {/* Search Bar */}
-                            <div className="relative">
-                                <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
-                                <input
-                                    type="text"
-                                    placeholder="Buscar material por nome ou código..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#001A72] transition-colors"
-                                />
-                            </div>
 
-                            {/* Search Results */}
-                            {searchTerm && (
-                                <div className="border border-slate-100 rounded-lg overflow-hidden bg-white shadow-sm">
-                                    {filteredItens.length > 0 ? (
-                                        filteredItens.map(item => (
-                                            <div key={item.id} className="flex items-center justify-between p-3 border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors">
-                                                <div>
-                                                    <p className="text-sm font-medium text-slate-800">{item.nome}</p>
-                                                    <p className="text-xs text-slate-500">Cód: {item.codigo} | Ref: {item.referencia}</p>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => addItem(item)}
-                                                    className="p-1.5 bg-blue-50 text-[#001A72] rounded-md hover:bg-[#001A72] hover:text-white transition-colors"
-                                                >
-                                                    <Plus className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        ))
-                                    ) : (
-                                        <div className="p-4 text-center text-sm text-slate-500">Nenhum item encontrado.</div>
+                            {/* Search + Tipo filter */}
+                            <div className="flex flex-col sm:flex-row gap-3" ref={searchRef}>
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="Buscar por descrição, código ou referência..."
+                                        value={searchTerm}
+                                        onChange={(e) => { setSearchTerm(e.target.value); setShowDropdown(true); }}
+                                        onFocus={() => setShowDropdown(true)}
+                                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#001A72] transition-colors"
+                                    />
+
+                                    {/* Dropdown results */}
+                                    {showDropdown && (searchTerm || tipoFiltro) && (
+                                        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden max-h-80 overflow-y-auto">
+                                            {filteredItens.length > 0 ? (
+                                                <>
+                                                    {filteredItens.map(item => {
+                                                        const alreadyAdded = selectedIds.has(item.id);
+                                                        return (
+                                                            <div
+                                                                key={item.id}
+                                                                className={`flex items-center justify-between px-4 py-3 border-b border-slate-50 last:border-0 transition-colors ${alreadyAdded ? 'bg-green-50/60' : 'hover:bg-slate-50'}`}
+                                                            >
+                                                                <div className="flex-1 min-w-0 mr-3">
+                                                                    <p className="text-sm font-medium text-slate-800 truncate">{item.nome}</p>
+                                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                                        <span className="text-xs text-slate-400">Cód: {item.codigo}</span>
+                                                                        <span className="text-xs text-slate-300">·</span>
+                                                                        <span className="text-xs text-slate-400">Ref: {item.referencia}</span>
+                                                                        {item.tipo && (
+                                                                            <span className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-full uppercase tracking-wide ${TIPO_COLORS[item.tipo] ?? 'bg-slate-100 text-slate-600'}`}>
+                                                                                {item.tipo}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => !alreadyAdded && addItem(item)}
+                                                                    disabled={alreadyAdded}
+                                                                    className={`shrink-0 p-1.5 rounded-md transition-colors ${alreadyAdded ? 'bg-green-100 text-green-600 cursor-default' : 'bg-blue-50 text-[#001A72] hover:bg-[#001A72] hover:text-white'}`}
+                                                                >
+                                                                    {alreadyAdded ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                                                                </button>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    {filteredItens.length === 12 && (
+                                                        <div className="px-4 py-2 text-xs text-slate-400 text-center bg-slate-50">
+                                                            Refine a busca para ver mais resultados
+                                                        </div>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <div className="p-4 text-center text-sm text-slate-500">Nenhum item encontrado.</div>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
-                            )}
+
+                                <select
+                                    value={tipoFiltro}
+                                    onChange={(e) => { setTipoFiltro(e.target.value); setShowDropdown(true); }}
+                                    className="px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#001A72] transition-colors"
+                                >
+                                    <option value="">Todos os tipos</option>
+                                    {TIPOS.map(t => <option key={t} value={t}>{t}</option>)}
+                                </select>
+                            </div>
 
                             {/* Selected Items List */}
-                            <div className="mt-6">
-                                <h3 className="text-sm font-semibold text-slate-700 mb-3">Itens Selecionados ({selectedItens.length})</h3>
+                            <div>
+                                <h3 className="text-sm font-semibold text-slate-700 mb-3">
+                                    Itens do Pedido
+                                    {selectedItens.length > 0 && (
+                                        <span className="ml-2 bg-[#001A72] text-white text-xs px-2 py-0.5 rounded-full">
+                                            {selectedItens.length}
+                                        </span>
+                                    )}
+                                </h3>
+
                                 {selectedItens.length === 0 ? (
                                     <div className="p-8 border-2 border-dashed border-slate-200 rounded-lg text-center bg-slate-50/50">
-                                        <p className="text-sm text-slate-500">Nenhum item adicionado ao pedido ainda.</p>
+                                        <Package className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                                        <p className="text-sm text-slate-500">Nenhum item adicionado.</p>
+                                        <p className="text-xs text-slate-400 mt-1">Use a busca acima para encontrar e adicionar itens.</p>
                                     </div>
                                 ) : (
-                                    <div className="space-y-3">
-                                        {selectedItens.map(item => (
-                                            <div key={item.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg bg-white shadow-sm ring-1 ring-slate-100">
-                                                <div className="flex-1">
-                                                    <p className="text-sm font-bold text-slate-800">{item.nome}</p>
-                                                    <p className="text-xs text-slate-500">Cód: {item.codigo}</p>
+                                    <div className="space-y-2">
+                                        {selectedItens.map((item, index) => (
+                                            <div key={item.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg bg-white shadow-sm">
+                                                <div className="flex items-center gap-3 flex-1 min-w-0 mr-4">
+                                                    <span className="text-xs text-slate-400 font-mono w-5 text-right shrink-0">{index + 1}</span>
+                                                    <div className="min-w-0">
+                                                        <p className="text-sm font-medium text-slate-800 truncate">{item.nome}</p>
+                                                        <div className="flex items-center gap-2 mt-0.5">
+                                                            <span className="text-xs text-slate-400">Cód: {item.codigo}</span>
+                                                            {item.tipo && (
+                                                                <span className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-full uppercase tracking-wide ${TIPO_COLORS[item.tipo] ?? 'bg-slate-100 text-slate-600'}`}>
+                                                                    {item.tipo}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
                                                 </div>
 
-                                                <div className="flex items-center gap-4">
+                                                <div className="flex items-center gap-3 shrink-0">
                                                     <div className="flex items-center border border-slate-200 rounded-md overflow-hidden">
                                                         <button
                                                             type="button"
                                                             onClick={() => updateQuantity(item.id, item.quantidade - 1)}
-                                                            className="px-3 py-1 bg-slate-50 text-slate-600 hover:bg-slate-100 transition-colors"
-                                                        >-</button>
-                                                        <span className="px-3 py-1 text-sm font-medium w-12 text-center border-x border-slate-200">{item.quantidade}</span>
+                                                            className="px-3 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 transition-colors font-medium"
+                                                        >−</button>
+                                                        <input
+                                                            type="number"
+                                                            min={1}
+                                                            value={item.quantidade}
+                                                            onChange={(e) => handleQtyInput(item.id, e.target.value)}
+                                                            className="w-14 py-1.5 text-sm font-medium text-center border-x border-slate-200 focus:outline-none focus:bg-blue-50"
+                                                        />
                                                         <button
                                                             type="button"
                                                             onClick={() => updateQuantity(item.id, item.quantidade + 1)}
-                                                            className="px-3 py-1 bg-slate-50 text-slate-600 hover:bg-slate-100 transition-colors"
+                                                            className="px-3 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 transition-colors font-medium"
                                                         >+</button>
                                                     </div>
                                                     <button
                                                         type="button"
                                                         onClick={() => removeItem(item.id)}
-                                                        className="p-2 text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                                                        className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
                                                     >
                                                         <Trash2 className="w-4 h-4" />
                                                     </button>
@@ -255,31 +323,44 @@ export default function NovoPedidoPage() {
                                     </div>
                                 )}
                             </div>
-
                         </div>
                     </div>
                 </div>
 
-                {/* Right Column: Order Summary & Actions */}
+                {/* Right Column: Summary */}
                 <div className="space-y-6">
                     <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden sticky top-24">
                         <div className="p-6 border-b border-slate-100">
                             <h2 className="text-lg font-bold text-slate-800">Resumo do Pedido</h2>
                         </div>
-
                         <div className="p-6 space-y-4">
                             <div className="flex justify-between text-sm">
-                                <span className="text-slate-500">Qtd Itens Distintos:</span>
+                                <span className="text-slate-500">Unidade:</span>
+                                <span className="font-medium text-slate-800 text-right max-w-[140px] truncate">
+                                    {unidades.find(u => u.id === selectedUnidade)?.nome || '—'}
+                                </span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-slate-500">Itens distintos:</span>
                                 <span className="font-medium text-slate-800">{selectedItens.length}</span>
                             </div>
                             <div className="flex justify-between text-sm">
-                                <span className="text-slate-500">Total Solicitado:</span>
-                                <span className="font-medium text-slate-800">
-                                    {selectedItens.reduce((acc, item) => acc + item.quantidade, 0)} unidades
-                                </span>
+                                <span className="text-slate-500">Total de unidades:</span>
+                                <span className="font-medium text-slate-800">{totalUnidades}</span>
                             </div>
 
-                            <div className="pt-4 mt-4 border-t border-slate-100">
+                            {selectedItens.length > 0 && (
+                                <div className="pt-3 mt-1 border-t border-slate-100 space-y-1 max-h-48 overflow-y-auto">
+                                    {selectedItens.map(item => (
+                                        <div key={item.id} className="flex justify-between text-xs text-slate-500">
+                                            <span className="truncate mr-2 max-w-[140px]">{item.nome}</span>
+                                            <span className="shrink-0 font-medium text-slate-700">× {item.quantidade}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className="pt-4 mt-2 border-t border-slate-100">
                                 <button
                                     type="submit"
                                     disabled={isSubmitting || selectedItens.length === 0 || !selectedUnidade}
@@ -296,8 +377,7 @@ export default function NovoPedidoPage() {
                                 </button>
                             </div>
                         </div>
-                        {/* Decoration */}
-                        <div className="h-1.5 w-full bg-orange-500"></div>
+                        <div className="h-1.5 w-full bg-orange-500" />
                     </div>
                 </div>
 
