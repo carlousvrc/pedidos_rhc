@@ -1,5 +1,7 @@
 // lib/mockData.ts
 
+export { mockItens } from './itensData';
+
 export const mockUnidades = [
     { id: 'u1', nome: 'CTI Adulto' },
     { id: 'u2', nome: 'Pronto Socorro' },
@@ -10,18 +12,6 @@ export const mockUnidades = [
     { id: 'u7', nome: 'Ambulatório Central' },
 ];
 
-export const mockItens = [
-    { id: 'i1', codigo: '1001', referencia: 'CX-100', nome: 'Luva de Procedimento Tamanho M (Caixa com 100)' },
-    { id: 'i2', codigo: '1002', referencia: 'CX-100', nome: 'Luva de Procedimento Tamanho G (Caixa com 100)' },
-    { id: 'i3', codigo: '2001', referencia: 'PCT-50', nome: 'Seringa 10ml sem agulha (Pacote com 50)' },
-    { id: 'i4', codigo: '2002', referencia: 'PCT-50', nome: 'Seringa 20ml com agulha (Pacote com 50)' },
-    { id: 'i5', codigo: '3001', referencia: 'UN', nome: 'Cateter Venoso Periférico 20G' },
-    { id: 'i6', codigo: '4001', referencia: 'RL', nome: 'Atadura de Crepe 10cm x 1,8m' },
-    { id: 'i7', codigo: '5001', referencia: 'CX-50', nome: 'Máscara Cirúrgica Tripla com Elástico (Caixa com 50)' },
-    { id: 'i8', codigo: '6001', referencia: 'FR-250', nome: 'Álcool Gel 70% 250ml' },
-    { id: 'i9', codigo: '7001', referencia: 'CX-50', nome: 'Avental Descartável Impermeável (Caixa com 50)' },
-    { id: 'i10', codigo: '8001', referencia: 'PCT-10', nome: 'Compressa de Gaze Hidrófila (Pacote com 10)' },
-];
 
 const dataOntem = new Date();
 dataOntem.setDate(dataOntem.getDate() - 1);

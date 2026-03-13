@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS unidades (
 
 CREATE TABLE IF NOT EXISTS itens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tipo TEXT,
     codigo TEXT NOT NULL,
     referencia TEXT,
     nome TEXT NOT NULL

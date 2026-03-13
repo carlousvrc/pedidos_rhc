@@ -54,6 +54,12 @@ export function Navbar() {
                         Relatórios
                     </Link>
                     <Link
+                        href="/dashboard/itens"
+                        className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
+                    >
+                        Itens
+                    </Link>
+                    <Link
                         href="/dashboard/usuarios"
                         className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
                     >
