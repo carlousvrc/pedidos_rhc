@@ -150,9 +150,10 @@ export default function NovoPedidoPage() {
             if (itemsError) throw itemsError;
 
             router.push(`/dashboard/pedidos/${newOrder.id}`);
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error submitting order:', error);
-            alert('Erro ao salvar o pedido. Tente novamente.');
+            const msg = error?.message || error?.details || error?.hint || JSON.stringify(error);
+            alert(`Erro ao salvar o pedido:\n${msg}`);
             setIsSubmitting(false);
         }
     };
