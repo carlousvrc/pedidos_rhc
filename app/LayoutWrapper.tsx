@@ -1,9 +1,13 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { Navbar } from './Navbar';
 
-export function LayoutWrapper({ children }: { children: React.ReactNode }) {
+interface LayoutWrapperProps {
+    children: React.ReactNode;
+    navbar: React.ReactNode;
+}
+
+export function LayoutWrapper({ children, navbar }: LayoutWrapperProps) {
     const pathname = usePathname();
     const isLogin = pathname === '/login';
 
@@ -13,7 +17,7 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
 
     return (
         <>
-            <Navbar />
+            {navbar}
             <main className="flex-1 w-full mx-auto p-4 sm:p-6 lg:p-8">
                 {children}
             </main>

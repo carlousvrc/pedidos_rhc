@@ -30,30 +30,34 @@ export const mockPedidos = [
         data_pedido: new Date().toISOString(),
         unidades: { nome: 'Centro Cirúrgico' },
         unidade_id: 'u3',
+        usuario_id: 'usr2',
     },
     {
         id: 'p2',
         numero_pedido: '100541',
-        status: 'Atendido',
+        status: 'Realizado',
         data_pedido: dataOntem.toISOString(),
         unidades: { nome: 'Pronto Socorro' },
         unidade_id: 'u2',
+        usuario_id: 'usr2',
     },
     {
         id: 'p3',
         numero_pedido: '100540',
-        status: 'Cancelado',
+        status: 'Recebido',
         data_pedido: dataAnteontem.toISOString(),
         unidades: { nome: 'CTI Adulto' },
         unidade_id: 'u1',
+        usuario_id: 'usr2',
     },
     {
         id: 'p4',
         numero_pedido: '100539',
-        status: 'Atendido',
+        status: 'Realizado',
         data_pedido: dataAnteontem.toISOString(),
         unidades: { nome: 'Pediatria' },
         unidade_id: 'u4',
+        usuario_id: 'usr2',
     },
     {
         id: 'p5',
@@ -62,15 +66,16 @@ export const mockPedidos = [
         data_pedido: dataAnteontem.toISOString(),
         unidades: { nome: 'Maternidade' },
         unidade_id: 'u5',
+        usuario_id: 'usr2',
     }
 ];
 
 export const mockPedidosItens = [
-    { id: 'pi1', pedido_id: 'p1', item_id: 'i1', quantidade: 5 },
-    { id: 'pi2', pedido_id: 'p1', item_id: 'i7', quantidade: 10 },
-    { id: 'pi3', pedido_id: 'p2', item_id: 'i3', quantidade: 2 },
-    { id: 'pi4', pedido_id: 'p2', item_id: 'i4', quantidade: 2 },
-    { id: 'pi5', pedido_id: 'p3', item_id: 'i8', quantidade: 20 },
+    { id: 'pi1', pedido_id: 'p1', item_id: 'i1', quantidade: 5, quantidade_atendida: 0, quantidade_recebida: 0, observacao: '' },
+    { id: 'pi2', pedido_id: 'p1', item_id: 'i7', quantidade: 10, quantidade_atendida: 0, quantidade_recebida: 0, observacao: '' },
+    { id: 'pi3', pedido_id: 'p2', item_id: 'i3', quantidade: 2, quantidade_atendida: 2, quantidade_recebida: 0, observacao: '' },
+    { id: 'pi4', pedido_id: 'p2', item_id: 'i4', quantidade: 2, quantidade_atendida: 1, quantidade_recebida: 0, observacao: '' },
+    { id: 'pi5', pedido_id: 'p3', item_id: 'i8', quantidade: 20, quantidade_atendida: 18, quantidade_recebida: 18, observacao: '2 unidades faltaram' },
 ];
 
 export const mockUsuarios = [
@@ -80,6 +85,7 @@ export const mockUsuarios = [
         password_hash: 'Rc2026#@', // For testing purposes in plaintext
         nome: 'Administrador do Sistema',
         role: 'admin',
+        unidade_id: null,
         created_at: new Date().toISOString()
     },
     {
@@ -87,7 +93,17 @@ export const mockUsuarios = [
         username: 'enfermagem.cti',
         password_hash: 'senha123',
         nome: 'Enfermagem CTI',
-        role: 'user',
+        role: 'solicitante',
+        unidade_id: 'u3',
+        created_at: new Date().toISOString()
+    },
+    {
+        id: 'usr3',
+        username: 'comprador',
+        password_hash: 'comprador123',
+        nome: 'Comprador RHC',
+        role: 'comprador',
+        unidade_id: null,
         created_at: new Date().toISOString()
     }
 ];

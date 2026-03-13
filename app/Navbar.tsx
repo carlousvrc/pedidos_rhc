@@ -1,9 +1,24 @@
 import Link from 'next/link';
 import Image from 'next/image';
-import { Bell, ChevronDown, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { logoutUser } from './login/actions';
+import { getCurrentUser } from '@/lib/auth';
 
-export function Navbar() {
+function getRoleBadgeClass(role: string) {
+    switch (role) {
+        case 'admin': return 'bg-purple-500 text-white';
+        case 'comprador': return 'bg-blue-400 text-white';
+        case 'solicitante': return 'bg-green-500 text-white';
+        default: return 'bg-orange-500 text-white';
+    }
+}
+
+export async function Navbar() {
+    const currentUser = await getCurrentUser();
+    const nome = currentUser?.nome || 'Usuário';
+    const role = currentUser?.role || 'solicitante';
+    const initial = nome.charAt(0).toUpperCase();
+
     return (
         <nav className="h-16 bg-[#001A72] flex items-center justify-between px-4 sm:px-8 text-white sticky top-0 z-50 shadow-md">
             <div className="flex items-center gap-6 sm:gap-10">
@@ -35,18 +50,22 @@ export function Navbar() {
                     >
                         Dashboard
                     </Link>
-                    <Link
-                        href="/dashboard/pedidos/novo"
-                        className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
-                    >
-                        Novo Pedido
-                    </Link>
-                    <Link
-                        href="/dashboard/bionexo"
-                        className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
-                    >
-                        Bionexo
-                    </Link>
+                    {(role === 'solicitante' || role === 'admin') && (
+                        <Link
+                            href="/dashboard/pedidos/novo"
+                            className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
+                        >
+                            Novo Pedido
+                        </Link>
+                    )}
+                    {(role === 'comprador' || role === 'admin') && (
+                        <Link
+                            href="/dashboard/bionexo"
+                            className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
+                        >
+                            Bionexo
+                        </Link>
+                    )}
                     <Link
                         href="/dashboard/historico"
                         className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
@@ -65,24 +84,35 @@ export function Navbar() {
                     >
                         Itens
                     </Link>
-                    <Link
-                        href="/dashboard/usuarios"
-                        className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
-                    >
-                        Usuários
-                    </Link>
+                    {role === 'admin' && (
+                        <Link
+                            href="/dashboard/usuarios"
+                            className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
+                        >
+                            Usuários
+                        </Link>
+                    )}
                 </div>
             </div>
 
             {/* User Profile Right Side */}
-            <div className="flex items-center">
+            <div className="flex items-center gap-3">
+                {/* Role badge */}
+                <span className={`hidden sm:inline-flex text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${getRoleBadgeClass(role)}`}>
+                    {role}
+                </span>
+
                 <form action={logoutUser}>
-                    <button type="submit" className="flex items-center gap-3 bg-[#001250] hover:bg-[#001250]/80 transition-colors rounded-full py-1.5 px-2 sm:pr-4 group" title="Sair do sistema">
+                    <button
+                        type="submit"
+                        className="flex items-center gap-3 bg-[#001250] hover:bg-[#001250]/80 transition-colors rounded-full py-1.5 px-2 sm:pr-4 group"
+                        title="Sair do sistema"
+                    >
                         <div className="bg-orange-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">
-                            A
+                            {initial}
                         </div>
                         <div className="hidden sm:flex items-center gap-2">
-                            <span className="text-sm font-medium">Administrador</span>
+                            <span className="text-sm font-medium">{nome}</span>
                             <LogOut className="w-4 h-4 text-white/70 group-hover:text-red-400 transition-colors" />
                         </div>
                     </button>
