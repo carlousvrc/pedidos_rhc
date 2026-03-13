@@ -11,6 +11,11 @@ ALTER TABLE pedidos_itens ADD COLUMN IF NOT EXISTS quantidade_atendida INTEGER D
 ALTER TABLE pedidos_itens ADD COLUMN IF NOT EXISTS quantidade_recebida INTEGER DEFAULT 0;
 ALTER TABLE pedidos_itens ADD COLUMN IF NOT EXISTS observacao TEXT DEFAULT '';
 
+-- Atualiza o check constraint para incluir os novos roles
+ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS usuarios_role_check;
+ALTER TABLE usuarios ADD CONSTRAINT usuarios_role_check
+    CHECK (role IN ('admin', 'user', 'solicitante', 'comprador'));
+
 -- Seed comprador user (password: comprador123)
 INSERT INTO usuarios (username, password_hash, nome, role)
 VALUES ('comprador', 'comprador123', 'Comprador RHC', 'comprador')
