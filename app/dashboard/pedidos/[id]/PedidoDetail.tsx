@@ -90,7 +90,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     const [updating, setUpdating] = useState(false);
     const [saving, setSaving] = useState(false);
     const [processingPdf, setProcessingPdf] = useState(false);
-    const [pdfFile, setPdfFile] = useState<File | null>(null);
+    const [pdfFiles, setPdfFiles] = useState<File[]>([]);
     const [pdfError, setPdfError] = useState('');
     const [localEdits, setLocalEdits] = useState<Record<string, { quantidade_recebida: number; observacao: string }>>({});
     const fileRef = useRef<HTMLInputElement>(null);
@@ -185,26 +185,35 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     }, [items]);
 
     async function handleProcessBionexo() {
-        if (!pdfFile) {
-            setPdfError('Selecione um arquivo PDF primeiro.');
+        if (pdfFiles.length === 0) {
+            setPdfError('Selecione pelo menos um arquivo PDF.');
             return;
         }
         setProcessingPdf(true);
         setPdfError('');
 
         try {
-            const formData = new FormData();
-            formData.append('file', pdfFile);
+            // Process all files and merge results (sum quantities per codigo)
+            const mergedMap: Record<string, number> = {};
 
-            const res = await fetch('/api/bionexo/convert', { method: 'POST', body: formData });
-            const json = await res.json();
+            for (const file of pdfFiles) {
+                const formData = new FormData();
+                formData.append('file', file);
 
-            if (!res.ok) {
-                throw new Error(json.error || 'Erro ao processar PDF.');
+                const res = await fetch('/api/bionexo/convert', { method: 'POST', body: formData });
+                const json = await res.json();
+
+                if (!res.ok) {
+                    throw new Error(`${file.name}: ${json.error || 'Erro ao processar PDF.'}`);
+                }
+
+                const fileItens: Array<{ codigo: string; quantidade: number }> = json.itens || [];
+                for (const it of fileItens) {
+                    mergedMap[it.codigo] = (mergedMap[it.codigo] || 0) + it.quantidade;
+                }
             }
 
-            // json.itens: [{ codigo: string, quantidade: number }]
-            const bionexoItens: Array<{ codigo: string; quantidade: number }> = json.itens || [];
+            const bionexoItens = Object.entries(mergedMap).map(([codigo, quantidade]) => ({ codigo, quantidade }));
 
             // Match by codigo and update supabase
             const updates = items.map(item => {
@@ -393,21 +402,27 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                 onClick={() => fileRef.current?.click()}
                             >
                                 <Upload className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                                {pdfFile ? (
-                                    <p className="text-sm font-medium text-[#001A72]">{pdfFile.name}</p>
+                                {pdfFiles.length > 0 ? (
+                                    <div className="space-y-1">
+                                        {pdfFiles.map((f, i) => (
+                                            <p key={i} className="text-sm font-medium text-[#001A72]">{f.name}</p>
+                                        ))}
+                                        <p className="text-xs text-slate-400 mt-2">{pdfFiles.length} arquivo(s) selecionado(s)</p>
+                                    </div>
                                 ) : (
                                     <>
-                                        <p className="text-sm text-slate-500">Clique para selecionar o PDF Bionexo</p>
-                                        <p className="text-xs text-slate-400 mt-1">Somente arquivos .pdf</p>
+                                        <p className="text-sm text-slate-500">Clique para selecionar os PDFs do Bionexo</p>
+                                        <p className="text-xs text-slate-400 mt-1">Múltiplos arquivos .pdf permitidos</p>
                                     </>
                                 )}
                                 <input
                                     ref={fileRef}
                                     type="file"
                                     accept=".pdf"
+                                    multiple
                                     className="hidden"
                                     onChange={e => {
-                                        setPdfFile(e.target.files?.[0] || null);
+                                        setPdfFiles(Array.from(e.target.files || []));
                                         setPdfError('');
                                     }}
                                 />
@@ -415,7 +430,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                             {pdfError && <p className="text-sm text-red-600">{pdfError}</p>}
                             <button
                                 onClick={handleProcessBionexo}
-                                disabled={processingPdf || !pdfFile}
+                                disabled={processingPdf || pdfFiles.length === 0}
                                 className="flex items-center gap-2 px-5 py-2.5 bg-[#001A72] text-white rounded-lg font-medium hover:bg-[#001250] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {processingPdf ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
