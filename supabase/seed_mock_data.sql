@@ -8,7 +8,7 @@
 -- 1. Criação das tabelas (Caso ainda não existam no seu projeto)
 CREATE TABLE IF NOT EXISTS unidades (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    nome TEXT NOT NULL
+    nome TEXT NOT NULL UNIQUE
 );
 
 CREATE TABLE IF NOT EXISTS itens (
