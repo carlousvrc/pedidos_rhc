@@ -96,18 +96,17 @@ export default function BionexoPage() {
 
         setIsProcessing(true);
         setError(null);
-        setItems([]);
 
         const progress: FileProgress[] = pdfs.map(f => ({ name: f.name, status: 'pending' }));
         setFileProgress(progress);
 
         const allItems: BionexoItem[] = [];
         let globalIdx = 0;
+        let hadSuccess = false;
 
         for (let i = 0; i < pdfs.length; i++) {
             const file = pdfs[i];
 
-            // mark as processing
             setFileProgress(prev => prev.map((p, idx) => idx === i ? { ...p, status: 'processing' } : p));
 
             const formData = new FormData();
@@ -132,6 +131,7 @@ export default function BionexoPage() {
                 }));
 
                 allItems.push(...mapped);
+                hadSuccess = true;
 
                 setFileProgress(prev => prev.map((p, idx) =>
                     idx === i ? { ...p, status: 'done', count: mapped.length } : p
@@ -142,13 +142,23 @@ export default function BionexoPage() {
                     idx === i ? { ...p, status: 'error', error: msg } : p
                 ));
                 if (msg.includes('ECONNREFUSED') || msg.includes('fetch failed')) {
-                    setError('Serviço Bionexo indisponível. Verifique se o backend está rodando.');
+                    setError('Serviço Bionexo indisponível. Verifique se o backend Python está rodando.');
                     break;
                 }
             }
         }
 
-        setItems(allItems);
+        if (hadSuccess) {
+            // Merge with existing items (avoid duplicates by _source+nome key)
+            setItems(prev => {
+                const existingKeys = new Set(prev.map(i => `${i._source}||${i['Produto']}`));
+                const newOnly = allItems.filter(i => !existingKeys.has(`${i._source}||${i['Produto']}`));
+                return [...prev, ...newOnly];
+            });
+        } else {
+            // All failed — reset progress so upload area shows again cleanly
+            setFileProgress([]);
+        }
         setIsProcessing(false);
     }, []);
 
@@ -254,6 +264,13 @@ export default function BionexoPage() {
                 </div>
                 {showResults && (
                     <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={isProcessing}
+                            className="flex items-center gap-2 px-3 py-2 border border-slate-200 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+                        >
+                            <Upload className="w-4 h-4" /> Carregar PDFs
+                        </button>
                         <select
                             onChange={e => setAllStatus(e.target.value as StatusOpcao)}
                             defaultValue=""
@@ -296,9 +313,9 @@ export default function BionexoPage() {
                 </div>
             )}
 
-            {/* Processing progress */}
-            {(isProcessing || (fileProgress.length > 0 && items.length === 0 && !showUpload)) && (
-                <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6 space-y-3">
+            {/* Processing progress — visible whenever isProcessing, regardless of existing items */}
+            {isProcessing && fileProgress.length > 0 && (
+                <div className="bg-white rounded-xl border border-[#001A72]/20 shadow-sm p-6 space-y-3">
                     <div className="flex items-center gap-2 mb-4">
                         <Loader2 className="w-5 h-5 text-[#001A72] animate-spin" />
                         <h2 className="font-semibold text-slate-700">
