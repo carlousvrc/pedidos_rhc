@@ -3,9 +3,33 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Plus, Search, Trash2, ArrowLeft, Save, Check, Package } from 'lucide-react';
+import { Plus, Search, Trash2, ArrowLeft, Save, Check, Package, Download } from 'lucide-react';
 import Link from 'next/link';
+import Papa from 'papaparse';
 import { mockItens, mockUnidades } from '@/lib/mockData';
+
+function downloadCsv(numeroPedido: string, unidadeNome: string, items: any[]) {
+    const rows = items.map(item => ({
+        Numero_Pedido: numeroPedido,
+        Unidade: unidadeNome,
+        Data: new Date().toLocaleDateString('pt-BR'),
+        Tipo: item.tipo || '',
+        Codigo: item.codigo,
+        Referencia: item.referencia,
+        Descricao: item.nome,
+        Quantidade: item.quantidade,
+    }));
+    const csv = Papa.unparse(rows, { delimiter: ';', header: true });
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Pedido_${numeroPedido}_${unidadeNome.replace(/\s+/g, '_')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
 
 const TIPOS = [
     'B.BRAUN',
@@ -108,6 +132,11 @@ export default function NovoPedidoPage() {
         setIsSubmitting(true);
         try {
             const numeroPedido = Math.floor(100000 + Math.random() * 900000).toString();
+            const unidadeNome = unidades.find(u => u.id === selectedUnidade)?.nome || selectedUnidade;
+
+            // Generate and download CSV immediately
+            downloadCsv(numeroPedido, unidadeNome, selectedItens);
+
             const { data: newOrder, error: orderError } = await supabase
                 .from('pedidos')
                 .insert({ numero_pedido: numeroPedido, unidade_id: selectedUnidade, status: 'Pendente', data_pedido: new Date().toISOString() })
@@ -360,7 +389,20 @@ export default function NovoPedidoPage() {
                                 </div>
                             )}
 
-                            <div className="pt-4 mt-2 border-t border-slate-100">
+                            <div className="pt-4 mt-2 border-t border-slate-100 space-y-2">
+                                <button
+                                    type="button"
+                                    disabled={selectedItens.length === 0 || !selectedUnidade}
+                                    onClick={() => {
+                                        const num = Math.floor(100000 + Math.random() * 900000).toString();
+                                        const nome = unidades.find(u => u.id === selectedUnidade)?.nome || selectedUnidade;
+                                        downloadCsv(num, nome, selectedItens);
+                                    }}
+                                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-[#001A72] text-[#001A72] rounded-lg font-medium hover:bg-blue-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm"
+                                >
+                                    <Download className="w-4 h-4" />
+                                    Baixar CSV
+                                </button>
                                 <button
                                     type="submit"
                                     disabled={isSubmitting || selectedItens.length === 0 || !selectedUnidade}

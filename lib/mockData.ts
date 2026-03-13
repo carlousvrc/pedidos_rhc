@@ -3,13 +3,16 @@
 export { mockItens } from './itensData';
 
 export const mockUnidades = [
-    { id: 'u1', nome: 'CTI Adulto' },
-    { id: 'u2', nome: 'Pronto Socorro' },
-    { id: 'u3', nome: 'Centro Cirúrgico' },
-    { id: 'u4', nome: 'Pediatria' },
-    { id: 'u5', nome: 'Maternidade' },
-    { id: 'u6', nome: 'Enfermaria 3A' },
-    { id: 'u7', nome: 'Ambulatório Central' },
+    { id: 'u1',  nome: 'HOSPITAL CASA EVANGELICO' },
+    { id: 'u2',  nome: 'HOSPITAL CASA SAO BERNARDO' },
+    { id: 'u3',  nome: 'HOSPITAL CASA DE PORTUGAL' },
+    { id: 'u4',  nome: 'HOSPITAL CASA MENSSANA' },
+    { id: 'u5',  nome: 'HOSPITAL CASA ILHA DO GOVERNADOR' },
+    { id: 'u6',  nome: 'HOSPITAL CASA RIO LARANJEIRAS' },
+    { id: 'u7',  nome: 'HOSPITAL CASA RIO BOTAFOGO' },
+    { id: 'u8',  nome: 'OFTALMOCASA' },
+    { id: 'u9',  nome: 'HOSPITAL CASA SANTA CRUZ' },
+    { id: 'u10', nome: 'HOSPITAL CASA PREMIUM' },
 ];
 
 

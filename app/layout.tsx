@@ -9,8 +9,11 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'RHC Financeiro',
+  title: 'RHC Pedidos',
   description: 'Sistema de Pedidos Hospitalares',
+  icons: {
+    icon: '/logo.png',
+  },
 };
 
 export default function RootLayout({

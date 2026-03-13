@@ -35,14 +35,17 @@ CREATE TABLE IF NOT EXISTS pedidos_itens (
 );
 
 -- 2. Inserção de Unidades Hospitalares
-INSERT INTO unidades (nome) VALUES 
-('CTI Adulto'),
-('Pronto Socorro'),
-('Centro Cirúrgico'),
-('Pediatria'),
-('Maternidade'),
-('Enfermaria 3A'),
-('Ambulatório Central')
+INSERT INTO unidades (nome) VALUES
+('HOSPITAL CASA EVANGELICO'),
+('HOSPITAL CASA SAO BERNARDO'),
+('HOSPITAL CASA DE PORTUGAL'),
+('HOSPITAL CASA MENSSANA'),
+('HOSPITAL CASA ILHA DO GOVERNADOR'),
+('HOSPITAL CASA RIO LARANJEIRAS'),
+('HOSPITAL CASA RIO BOTAFOGO'),
+('OFTALMOCASA'),
+('HOSPITAL CASA SANTA CRUZ'),
+('HOSPITAL CASA PREMIUM')
 ON CONFLICT DO NOTHING;
 
 -- 3. Inserção de Itens/Materiais Hospitalares
