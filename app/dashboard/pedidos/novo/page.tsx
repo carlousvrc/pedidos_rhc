@@ -139,7 +139,7 @@ export default function NovoPedidoPage() {
 
             const { data: newOrder, error: orderError } = await supabase
                 .from('pedidos')
-                .insert({ numero_pedido: numeroPedido, unidade_id: selectedUnidade, status: 'Pendente', data_pedido: new Date().toISOString() })
+                .insert({ numero_pedido: numeroPedido, unidade_id: selectedUnidade, status: 'Pendente' })
                 .select()
                 .single();
             if (orderError) throw orderError;
