@@ -3,10 +3,11 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Plus, Search, Trash2, ArrowLeft, Save, Check, Package, Download } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, Save, Package, Download } from 'lucide-react';
 import Link from 'next/link';
 import Papa from 'papaparse';
 import { mockItens, mockUnidades } from '@/lib/mockData';
+import 'tom-select/dist/css/tom-select.css';
 
 function downloadCsv(numeroPedido: string, unidadeNome: string, items: any[]) {
     const rows = items.map(item => ({
@@ -58,13 +59,17 @@ export default function NovoPedidoPage() {
     const [itens, setItens] = useState<any[]>([]);
 
     const [selectedUnidade, setSelectedUnidade] = useState('');
-    const [searchTerm, setSearchTerm] = useState('');
     const [tipoFiltro, setTipoFiltro] = useState('');
-    const [showDropdown, setShowDropdown] = useState(false);
     const [selectedItens, setSelectedItens] = useState<any[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const searchRef = useRef<HTMLDivElement>(null);
+    const selectElRef = useRef<HTMLSelectElement>(null);
+    const tomSelectRef = useRef<any>(null);
+    const selectedIdsRef = useRef<Set<string>>(new Set());
+
+    useEffect(() => {
+        selectedIdsRef.current = new Set(selectedItens.map(i => i.id));
+    }, [selectedItens]);
 
     useEffect(() => {
         async function fetchInitialData() {
@@ -87,39 +92,70 @@ export default function NovoPedidoPage() {
         fetchInitialData();
     }, []);
 
-    // Close dropdown on outside click
+    // Init / reinit TomSelect when itens or tipoFiltro changes
     useEffect(() => {
-        function handleClickOutside(e: MouseEvent) {
-            if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
-                setShowDropdown(false);
+        if (!selectElRef.current || !itens.length) return;
+
+        // Lazy-import TomSelect to avoid SSR issues
+        import('tom-select').then(({ default: TomSelect }) => {
+            if (tomSelectRef.current) {
+                tomSelectRef.current.destroy();
+                tomSelectRef.current = null;
             }
-        }
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
+
+            const filteredOptions = tipoFiltro
+                ? itens.filter(i => i.tipo === tipoFiltro)
+                : itens;
+
+            const options = filteredOptions.map(item => ({
+                value: item.id,
+                text: item.nome,
+                codigo: String(item.codigo ?? ''),
+                referencia: String(item.referencia ?? ''),
+                tipo: item.tipo ?? '',
+            }));
+
+            tomSelectRef.current = new TomSelect(selectElRef.current!, {
+                options,
+                valueField: 'value',
+                labelField: 'text',
+                searchField: ['text', 'codigo', 'referencia'],
+                placeholder: 'Buscar por descrição, código ou referência...',
+                maxOptions: 60,
+                closeAfterSelect: true,
+                onItemAdd(value: string) {
+                    const item = itens.find(i => i.id === value);
+                    if (item && !selectedIdsRef.current.has(item.id)) {
+                        setSelectedItens(prev => [...prev, { ...item, quantidade: 1 }]);
+                    }
+                    // Clear selection so the field is ready for next search
+                    setTimeout(() => {
+                        tomSelectRef.current?.clear();
+                        tomSelectRef.current?.clearOptions();
+                        tomSelectRef.current?.addOptions(options);
+                    }, 0);
+                },
+                render: {
+                    option(data: any) {
+                        return `<div class="ts-item-option">
+                            <span class="ts-item-name">${data.text}</span>
+                            <span class="ts-item-meta">Cód: ${data.codigo} · Ref: ${data.referencia}${data.tipo ? ` · ${data.tipo}` : ''}</span>
+                        </div>`;
+                    },
+                    item(data: any) {
+                        return `<div>${data.text}</div>`;
+                    },
+                },
+            });
+        });
+
+        return () => {
+            tomSelectRef.current?.destroy();
+            tomSelectRef.current = null;
+        };
+    }, [itens, tipoFiltro]);
 
     const selectedIds = useMemo(() => new Set(selectedItens.map(i => i.id)), [selectedItens]);
-
-    const filteredItens = useMemo(() => {
-        const term = searchTerm.toLowerCase();
-        return itens.filter(item => {
-            const matchTipo = !tipoFiltro || item.tipo === tipoFiltro;
-            const matchSearch =
-                !term ||
-                item.nome.toLowerCase().includes(term) ||
-                item.codigo.toString().includes(term) ||
-                (item.referencia && item.referencia.toString().toLowerCase().includes(term));
-            return matchTipo && matchSearch;
-        }).slice(0, 12);
-    }, [itens, searchTerm, tipoFiltro]);
-
-    const addItem = (item: any) => {
-        if (!selectedIds.has(item.id)) {
-            setSelectedItens(prev => [...prev, { ...item, quantidade: 1 }]);
-        }
-        setSearchTerm('');
-        setShowDropdown(false);
-    };
 
     const removeItem = (id: string) => setSelectedItens(prev => prev.filter(i => i.id !== id));
 
@@ -222,71 +258,15 @@ export default function NovoPedidoPage() {
 
                         <div className="p-6 space-y-6">
 
-                            {/* Search + Tipo filter */}
-                            <div className="flex flex-col sm:flex-row gap-3" ref={searchRef}>
-                                <div className="relative flex-1">
-                                    <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
-                                    <input
-                                        type="text"
-                                        placeholder="Buscar por descrição, código ou referência..."
-                                        value={searchTerm}
-                                        onChange={(e) => { setSearchTerm(e.target.value); setShowDropdown(true); }}
-                                        onFocus={() => setShowDropdown(true)}
-                                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#001A72] transition-colors"
-                                    />
-
-                                    {/* Dropdown results */}
-                                    {showDropdown && (searchTerm || tipoFiltro) && (
-                                        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden max-h-80 overflow-y-auto">
-                                            {filteredItens.length > 0 ? (
-                                                <>
-                                                    {filteredItens.map(item => {
-                                                        const alreadyAdded = selectedIds.has(item.id);
-                                                        return (
-                                                            <div
-                                                                key={item.id}
-                                                                className={`flex items-center justify-between px-4 py-3 border-b border-slate-50 last:border-0 transition-colors ${alreadyAdded ? 'bg-green-50/60' : 'hover:bg-slate-50'}`}
-                                                            >
-                                                                <div className="flex-1 min-w-0 mr-3">
-                                                                    <p className="text-sm font-medium text-slate-800 truncate">{item.nome}</p>
-                                                                    <div className="flex items-center gap-2 mt-0.5">
-                                                                        <span className="text-xs text-slate-400">Cód: {item.codigo}</span>
-                                                                        <span className="text-xs text-slate-300">·</span>
-                                                                        <span className="text-xs text-slate-400">Ref: {item.referencia}</span>
-                                                                        {item.tipo && (
-                                                                            <span className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-full uppercase tracking-wide ${TIPO_COLORS[item.tipo] ?? 'bg-slate-100 text-slate-600'}`}>
-                                                                                {item.tipo}
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => !alreadyAdded && addItem(item)}
-                                                                    disabled={alreadyAdded}
-                                                                    className={`shrink-0 p-1.5 rounded-md transition-colors ${alreadyAdded ? 'bg-green-100 text-green-600 cursor-default' : 'bg-blue-50 text-[#001A72] hover:bg-[#001A72] hover:text-white'}`}
-                                                                >
-                                                                    {alreadyAdded ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                                                                </button>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                    {filteredItens.length === 12 && (
-                                                        <div className="px-4 py-2 text-xs text-slate-400 text-center bg-slate-50">
-                                                            Refine a busca para ver mais resultados
-                                                        </div>
-                                                    )}
-                                                </>
-                                            ) : (
-                                                <div className="p-4 text-center text-sm text-slate-500">Nenhum item encontrado.</div>
-                                            )}
-                                        </div>
-                                    )}
+                            {/* TomSelect + Tipo filter */}
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                <div className="flex-1">
+                                    <select ref={selectElRef} className="w-full" />
                                 </div>
 
                                 <select
                                     value={tipoFiltro}
-                                    onChange={(e) => { setTipoFiltro(e.target.value); setShowDropdown(true); }}
+                                    onChange={(e) => setTipoFiltro(e.target.value)}
                                     className="px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#001A72] transition-colors"
                                 >
                                     <option value="">Todos os tipos</option>
@@ -435,6 +415,56 @@ export default function NovoPedidoPage() {
                 </div>
 
             </form>
+
+            <style>{`
+                .ts-wrapper {
+                    width: 100%;
+                }
+                .ts-control {
+                    border: 1px solid #e2e8f0 !important;
+                    border-radius: 0.5rem !important;
+                    padding: 0.5rem 0.75rem !important;
+                    background: #fff !important;
+                    font-size: 0.875rem !important;
+                    box-shadow: none !important;
+                    min-height: 42px !important;
+                }
+                .ts-control:focus-within {
+                    border-color: #001A72 !important;
+                    box-shadow: 0 0 0 2px rgba(0,26,114,0.15) !important;
+                }
+                .ts-dropdown {
+                    border: 1px solid #e2e8f0 !important;
+                    border-radius: 0.5rem !important;
+                    box-shadow: 0 4px 16px rgba(0,0,0,0.10) !important;
+                    font-size: 0.875rem !important;
+                    margin-top: 4px !important;
+                }
+                .ts-dropdown .option {
+                    padding: 0 !important;
+                }
+                .ts-dropdown .option.active {
+                    background: #f1f5f9 !important;
+                    color: inherit !important;
+                }
+                .ts-item-option {
+                    display: flex;
+                    flex-direction: column;
+                    padding: 8px 14px;
+                }
+                .ts-item-name {
+                    font-weight: 500;
+                    color: #1e293b;
+                }
+                .ts-item-meta {
+                    font-size: 0.75rem;
+                    color: #94a3b8;
+                    margin-top: 1px;
+                }
+                .ts-control input::placeholder {
+                    color: #94a3b8;
+                }
+            `}</style>
         </div>
     );
 }
