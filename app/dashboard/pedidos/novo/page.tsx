@@ -71,8 +71,18 @@ export default function NovoPedidoPage() {
             const { data: unidadesData } = await supabase.from('unidades').select('*').order('nome');
             setUnidades(unidadesData?.length ? unidadesData : mockUnidades);
 
-            const { data: itensData } = await supabase.from('itens').select('*').order('nome');
-            setItens(itensData?.length ? itensData : mockItens);
+            // Busca todos os itens usando paginação (limite padrão do Supabase é 1000)
+            let allItens: any[] = [];
+            let from = 0;
+            const pageSize = 1000;
+            while (true) {
+                const { data: page } = await supabase.from('itens').select('*').order('nome').range(from, from + pageSize - 1);
+                if (!page || page.length === 0) break;
+                allItens = allItens.concat(page);
+                if (page.length < pageSize) break;
+                from += pageSize;
+            }
+            setItens(allItens.length ? allItens : mockItens);
         }
         fetchInitialData();
     }, []);
