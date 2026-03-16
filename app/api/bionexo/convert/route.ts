@@ -1,29 +1,226 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const BIONEXO_API = process.env.BIONEXO_API_URL || 'http://localhost:5000';
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+type Word = { text: string; x0: number; x1: number; top: number };
+type Column = { name: string; xStart: number; xEnd: number };
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function normalize(text: string): string {
+    return text.toLowerCase()
+        .replace(/[àáâãä]/g, 'a').replace(/[èéêë]/g, 'e')
+        .replace(/[ìíîï]/g, 'i').replace(/[òóôõö]/g, 'o')
+        .replace(/[ùúûü]/g, 'u').replace(/ç/g, 'c').replace(/ñ/g, 'n');
+}
+
+const HEADER_KEYS: Record<string, string> = {
+    'produto':      'produto',
+    'codigo':       'codigo',
+    'programacao':  'programacao',
+    'fabricante':   'fabricante',
+    'embalagem':    'embalagem',
+    'fornecedor':   'fornecedor',
+    'comentario':   'comentario',
+    'unitario':     'preco_unitario',
+    'quantidade':   'quantidade',
+    'justificativa':'justificativa',
+    'total':        'valor_total',
+    'referencia':   'preco_referencia',
+    'porcentagem':  'porcentagem',
+    'usuario':      'usuario',
+};
+
+function detectColumns(headerWords: Word[]): Column[] {
+    const buckets: Record<string, { x0: number; x1: number }> = {};
+    for (const w of headerWords) {
+        const wn = normalize(w.text);
+        for (const [key, col] of Object.entries(HEADER_KEYS)) {
+            if (wn.includes(key)) {
+                if (!buckets[col]) {
+                    buckets[col] = { x0: w.x0, x1: w.x1 };
+                } else {
+                    buckets[col].x0 = Math.min(buckets[col].x0, w.x0);
+                    buckets[col].x1 = Math.max(buckets[col].x1, w.x1);
+                }
+                break;
+            }
+        }
+    }
+    if (Object.keys(buckets).length === 0) return [];
+
+    const sorted = Object.entries(buckets)
+        .map(([name, { x0 }]) => ({ name, x0 }))
+        .sort((a, b) => a.x0 - b.x0);
+
+    const ITEM_NUM_X_MAX = 47;
+    const result: Column[] = [{ name: 'item_num', xStart: 0, xEnd: ITEM_NUM_X_MAX }];
+
+    for (let i = 0; i < sorted.length; i++) {
+        const { name, x0 } = sorted[i];
+        const xStart = i === 0 ? ITEM_NUM_X_MAX : (sorted[i - 1].x0 + x0) / 2;
+        const xEnd   = i + 1 < sorted.length ? (x0 + sorted[i + 1].x0) / 2 : 9999;
+        result.push({ name, xStart, xEnd });
+    }
+    return result;
+}
+
+function assignCol(x0: number, columns: Column[]): string | null {
+    for (const col of columns) {
+        if (x0 >= col.xStart && x0 <= col.xEnd) return col.name;
+    }
+    return null;
+}
+
+function wordsToRow(words: Word[], columns: Column[]): Record<string, string> {
+    const cells: Record<string, Array<[number, string]>> = {};
+    for (const w of words) {
+        const col = assignCol(w.x0, columns);
+        if (col) {
+            if (!cells[col]) cells[col] = [];
+            cells[col].push([w.top, w.text]);
+        }
+    }
+    const row: Record<string, string> = {};
+    for (const [col, parts] of Object.entries(cells)) {
+        row[col] = parts.sort((a, b) => a[0] - b[0]).map(p => p[1]).join(' ');
+    }
+    return row;
+}
+
+function parseQty(text: string): number {
+    const m = text.trim().match(/^([\d.]+)/);
+    if (!m) return 0;
+    const n = parseInt(m[1].replace(/\./g, ''), 10);
+    return isNaN(n) ? 0 : n;
+}
+
+// ── PDF Extraction ─────────────────────────────────────────────────────────────
+
+async function parseBionexoPdf(pdfBuffer: Buffer): Promise<Array<{ codigo: string; quantidade: number }>> {
+    // Dynamic import avoids SSR / module resolution issues
+    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+
+    // Disable web worker — run synchronously in Node.js main thread
+    (pdfjsLib as any).GlobalWorkerOptions.workerSrc = '';
+
+    const loadingTask = (pdfjsLib as any).getDocument({
+        data: new Uint8Array(pdfBuffer),
+        useWorkerFetch: false,
+        isEvalSupported: false,
+        disableFontFace: true,
+    });
+    const pdfDoc = await loadingTask.promise;
+
+    const results: Array<{ codigo: string; quantidade: number }> = [];
+    let lastColumns: Column[] | null = null;
+
+    for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+        const page = await pdfDoc.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 1.0 });
+        const pageHeight = viewport.height;
+
+        const textContent = await page.getTextContent();
+
+        // Build word list from pdfjs text items
+        const words: Word[] = [];
+        for (const item of textContent.items) {
+            if (!('str' in item)) continue;
+            const ti = item as any;
+            const str = (ti.str ?? '').trim();
+            if (!str) continue;
+            const x0  = ti.transform[4] as number;
+            const y   = ti.transform[5] as number;
+            const w   = (ti.width  as number) || 0;
+            const h   = (ti.height as number) || 10;
+            const top = Math.round((pageHeight - y - h) * 10) / 10;
+            words.push({ text: str, x0, x1: x0 + w, top });
+        }
+
+        // Find header y (line containing 'produto')
+        const prodWords = words.filter(w => normalize(w.text) === 'produto');
+
+        let columns: Column[];
+        let itemArea: Word[];
+
+        if (prodWords.length > 0) {
+            const headerY    = Math.min(...prodWords.map(w => w.top));
+            const headerWords = words.filter(w => Math.abs(w.top - headerY) <= 15);
+            columns = detectColumns(headerWords);
+            if (columns.length > 0) lastColumns = columns;
+            itemArea = words.filter(w => w.top > headerY + 15);
+        } else if (lastColumns) {
+            columns  = lastColumns;
+            itemArea = words;
+        } else {
+            continue;
+        }
+
+        if (columns.length === 0) continue;
+
+        // Detect item row starts (small integers in leftmost column area)
+        const itemXMax = columns.length > 1 ? columns[1].xStart - 5 : 47;
+        const byY: Record<number, { text: string; x0: number }> = {};
+
+        for (const w of itemArea) {
+            if (/^\d{1,3}$/.test(w.text) && w.x0 <= itemXMax) {
+                const yk = Math.round(w.top);
+                if (!byY[yk] || w.x0 < byY[yk].x0) byY[yk] = { text: w.text, x0: w.x0 };
+            }
+        }
+
+        const itemStarts = Object.entries(byY)
+            .map(([y, v]) => ({ y: parseFloat(y), itemNum: v.text }))
+            .sort((a, b) => a.y - b.y);
+
+        if (itemStarts.length === 0) continue;
+
+        const maxY = Math.max(...itemArea.map(w => w.top));
+        const minItemAreaY = Math.min(...itemArea.map(w => w.top));
+
+        for (let i = 0; i < itemStarts.length; i++) {
+            const { y: yStart } = itemStarts[i];
+            const yFrom = i === 0
+                ? (prodWords.length > 0 ? minItemAreaY : Math.max(minItemAreaY, yStart - 15))
+                : (itemStarts[i - 1].y + yStart) / 2;
+            const yTo = i + 1 < itemStarts.length
+                ? (yStart + itemStarts[i + 1].y) / 2
+                : maxY + 10;
+
+            const rowWords = itemArea.filter(w => w.top >= yFrom && w.top <= yTo);
+            const row = wordsToRow(rowWords, columns);
+
+            if (!row['produto']) continue;
+
+            const codigo    = (row['codigo'] ?? '').trim();
+            const quantidade = parseQty(row['quantidade'] ?? '');
+
+            if (codigo) results.push({ codigo, quantidade });
+        }
+    }
+
+    return results;
+}
+
+// ── Route Handler ──────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
     try {
         const formData = await request.formData();
+        // Accept both 'file' and 'pdf' field names for compatibility
+        const file = (formData.get('file') ?? formData.get('pdf')) as File | null;
 
-        const response = await fetch(`${BIONEXO_API}/converter`, {
-            method: 'POST',
-            body: formData,
-        });
-
-        const json = await response.json();
-
-        if (!response.ok) {
-            return NextResponse.json(json, { status: response.status });
+        if (!file) {
+            return NextResponse.json({ error: 'Nenhum arquivo PDF enviado.' }, { status: 400 });
         }
 
-        return NextResponse.json(json);
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const itens  = await parseBionexoPdf(buffer);
+
+        return NextResponse.json({ itens });
     } catch (err: any) {
-        const msg = err?.message || 'Erro ao conectar com o serviço Bionexo.';
-        const isConn = msg.includes('ECONNREFUSED') || msg.includes('fetch failed');
-        return NextResponse.json(
-            { error: isConn ? 'Serviço Bionexo indisponível. Verifique se o backend está rodando.' : msg },
-            { status: 503 }
-        );
+        const msg = err?.message ?? 'Erro ao processar PDF.';
+        console.error('[bionexo/convert]', msg);
+        return NextResponse.json({ error: msg }, { status: 500 });
     }
 }
