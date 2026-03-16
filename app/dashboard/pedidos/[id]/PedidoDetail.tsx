@@ -34,6 +34,7 @@ interface Pedido {
     unidade_id: string;
     usuario_id?: string;
     unidades?: { nome: string };
+    usuarios?: { nome: string };
 }
 
 type ItemReception = 'recebido' | 'parcial' | 'nao_recebido' | null;
@@ -112,7 +113,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     async function loadData() {
         const { data: supabasePedido, error } = await supabase
             .from('pedidos')
-            .select('*, unidades(nome)')
+            .select('*, unidades(nome), usuarios(nome)')
             .eq('id', id)
             .single();
 
@@ -367,6 +368,10 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                             <div>
                                 <p className="text-slate-500 mb-0.5">Unidade Solicitante</p>
                                 <p className="font-medium text-slate-900">{pedido.unidades?.nome || 'N/I'}</p>
+                            </div>
+                            <div>
+                                <p className="text-slate-500 mb-0.5">Solicitante</p>
+                                <p className="font-medium text-slate-900">{pedido.usuarios?.nome || '—'}</p>
                             </div>
                         </div>
                     </div>

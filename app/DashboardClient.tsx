@@ -35,7 +35,7 @@ async function fetchPedidos(currentUser: Usuario | null): Promise<any[]> {
     const scope = currentUser?.permissoes?.scope ?? 'operador';
     let query = supabase
         .from('pedidos')
-        .select('id, numero_pedido, status, created_at, unidades(nome), usuario_id')
+        .select('id, numero_pedido, status, created_at, unidades(nome), usuario_id, usuarios(nome)')
         .order('created_at', { ascending: false })
         .limit(200);
 
@@ -337,6 +337,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                                 )}
                                 <th className="px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Nº Pedido</th>
                                 <th className="px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Unidade</th>
+                                <th className="px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Solicitante</th>
                                 <th className="px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Data</th>
                                 <th className="px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
                                 {scope !== 'operador' && (
@@ -378,6 +379,9 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
                                             {pedido.unidades?.nome || 'Não informada'}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
+                                            {pedido.usuarios?.nome || '—'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                                             {pedido.created_at ? new Date(pedido.created_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
