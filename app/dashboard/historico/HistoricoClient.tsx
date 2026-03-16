@@ -2,7 +2,8 @@
 
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { Search, FileText, Clock, ArrowRight } from 'lucide-react';
+import { Search, FileText, Clock, ArrowRight, Trash2 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 interface Pedido {
     id: string;
@@ -16,6 +17,7 @@ interface Pedido {
 interface Props {
     pedidos: Pedido[];
     scope: string;
+    canDelete?: boolean;
 }
 
 const STATUS_TABS = ['Todos', 'Pendente', 'Realizado', 'Recebido'] as const;
@@ -36,20 +38,28 @@ function getRowAccent(status: string) {
     return '';
 }
 
-export default function HistoricoClient({ pedidos, scope }: Props) {
+export default function HistoricoClient({ pedidos, scope, canDelete }: Props) {
     const [search, setSearch] = useState('');
     const [activeTab, setActiveTab] = useState<typeof STATUS_TABS[number]>('Todos');
+    const [lista, setLista] = useState<Pedido[]>(pedidos);
+
+    async function handleDelete(id: string, numero: string) {
+        if (!confirm(`Excluir o pedido #${numero}? Esta ação não pode ser desfeita.`)) return;
+        await supabase.from('pedidos_itens').delete().eq('pedido_id', id);
+        await supabase.from('pedidos').delete().eq('id', id);
+        setLista(prev => prev.filter(p => p.id !== id));
+    }
 
     const counts = useMemo(() => ({
-        Todos:    pedidos.length,
-        Pendente: pedidos.filter(p => p.status?.toLowerCase() === 'pendente').length,
-        Realizado:pedidos.filter(p => p.status?.toLowerCase() === 'realizado').length,
-        Recebido: pedidos.filter(p => p.status?.toLowerCase() === 'recebido').length,
-    }), [pedidos]);
+        Todos:    lista.length,
+        Pendente: lista.filter(p => p.status?.toLowerCase() === 'pendente').length,
+        Realizado:lista.filter(p => p.status?.toLowerCase() === 'realizado').length,
+        Recebido: lista.filter(p => p.status?.toLowerCase() === 'recebido').length,
+    }), [lista]);
 
     const filtered = useMemo(() => {
         const term = search.toLowerCase();
-        return pedidos.filter(p => {
+        return lista.filter(p => {
             const matchTab = activeTab === 'Todos' || p.status?.toLowerCase() === activeTab.toLowerCase();
             const matchSearch =
                 !term ||
@@ -167,19 +177,30 @@ export default function HistoricoClient({ pedidos, scope }: Props) {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right">
-                                            <Link
-                                                href={`/dashboard/pedidos/${pedido.id}`}
-                                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                                                    pedido.status?.toLowerCase() === 'pendente' && scope === 'admin'
-                                                        ? 'bg-[#001A72] text-white hover:bg-[#001250]'
-                                                        : 'text-[#001A72] bg-blue-50 hover:bg-blue-100'
-                                                }`}
-                                            >
-                                                {pedido.status?.toLowerCase() === 'pendente' && scope === 'admin'
-                                                    ? 'Processar'
-                                                    : 'Visualizar'}
-                                                <ArrowRight className="w-3.5 h-3.5" />
-                                            </Link>
+                                            <div className="flex items-center justify-end gap-2">
+                                                <Link
+                                                    href={`/dashboard/pedidos/${pedido.id}`}
+                                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                                                        pedido.status?.toLowerCase() === 'pendente' && scope === 'admin'
+                                                            ? 'bg-[#001A72] text-white hover:bg-[#001250]'
+                                                            : 'text-[#001A72] bg-blue-50 hover:bg-blue-100'
+                                                    }`}
+                                                >
+                                                    {pedido.status?.toLowerCase() === 'pendente' && scope === 'admin'
+                                                        ? 'Processar'
+                                                        : 'Visualizar'}
+                                                    <ArrowRight className="w-3.5 h-3.5" />
+                                                </Link>
+                                                {canDelete && (
+                                                    <button
+                                                        onClick={() => handleDelete(pedido.id, pedido.numero_pedido)}
+                                                        className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                                        title="Excluir pedido"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 ))

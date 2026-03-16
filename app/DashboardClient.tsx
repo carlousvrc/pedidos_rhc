@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { FileText, Clock, CheckCircle, Plus, RefreshCw, ShoppingCart, Search, X } from 'lucide-react';
+import { FileText, Clock, CheckCircle, Plus, RefreshCw, ShoppingCart, Search, X, Trash2 } from 'lucide-react';
 import type { Usuario } from '@/lib/auth';
 
 interface DashboardClientProps {
@@ -108,7 +108,15 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
     const recebidos  = pedidos.filter((p: any) => p.status?.toLowerCase() === 'recebido').length;
 
     const canCreateOrder = !currentUser || currentUser?.permissoes?.modulos?.pedidos !== false;
+    const canDelete = currentUser?.permissoes?.modulos?.usuarios === true;
     const hasFilters = filterNumero || filterUnidade || filterData || filterStatus;
+
+    async function handleDelete(id: string, numero: string) {
+        if (!confirm(`Excluir o pedido #${numero}? Esta ação não pode ser desfeita.`)) return;
+        await supabase.from('pedidos_itens').delete().eq('pedido_id', id);
+        await supabase.from('pedidos').delete().eq('id', id);
+        setPedidos(prev => prev.filter(p => p.id !== id));
+    }
 
     function clearFilters() {
         setFilterNumero('');
@@ -306,12 +314,23 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                                         </td>
                                         {scope !== 'operador' && (
                                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                                <Link
-                                                    href={`/dashboard/pedidos/${pedido.id}`}
-                                                    className="text-[#001A72] hover:text-[#001250] bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-md transition-colors"
-                                                >
-                                                    Visualizar
-                                                </Link>
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <Link
+                                                        href={`/dashboard/pedidos/${pedido.id}`}
+                                                        className="text-[#001A72] hover:text-[#001250] bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-md transition-colors"
+                                                    >
+                                                        Visualizar
+                                                    </Link>
+                                                    {canDelete && (
+                                                        <button
+                                                            onClick={() => handleDelete(pedido.id, pedido.numero_pedido)}
+                                                            className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                                            title="Excluir pedido"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </td>
                                         )}
                                     </tr>

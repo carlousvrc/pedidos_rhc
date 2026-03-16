@@ -19,5 +19,6 @@ export default async function HistoricoPage() {
 
     const { data: pedidos } = await query;
 
-    return <HistoricoClient pedidos={(pedidos ?? []) as any[]} scope={scope} />;
+    const canDelete = currentUser?.permissoes?.modulos?.usuarios === true;
+    return <HistoricoClient pedidos={(pedidos ?? []) as any[]} scope={scope} canDelete={canDelete} />;
 }
