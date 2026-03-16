@@ -374,7 +374,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                             <div>
                                 <p className="text-slate-500 mb-0.5">Data</p>
                                 <p className="font-medium text-slate-900">
-                                    {new Date(pedido.created_at).toLocaleDateString('pt-BR')}
+                                    {new Date(pedido.created_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                 </p>
                             </div>
                             <div>

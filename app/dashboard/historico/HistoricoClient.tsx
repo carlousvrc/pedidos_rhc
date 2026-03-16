@@ -173,7 +173,7 @@ export default function HistoricoClient({ pedidos, scope, canDelete }: Props) {
                                             {pedido.unidades?.nome || '—'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                                            {new Date(pedido.created_at).toLocaleDateString('pt-BR')}
+                                            {new Date(pedido.created_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <span className={`px-2.5 py-0.5 inline-flex text-[11px] leading-5 font-semibold rounded-full capitalize ${getStatusBadge(pedido.status)}`}>
