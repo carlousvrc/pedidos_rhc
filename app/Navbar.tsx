@@ -22,11 +22,11 @@ export async function Navbar() {
 
     return (
         <nav className="h-16 bg-[#001A72] flex items-center justify-between px-4 sm:px-8 text-white sticky top-0 z-50 shadow-md">
-            <div className="flex items-center gap-6 sm:gap-10">
+            <div className="flex items-center gap-4">
 
                 {/* Logo Area */}
                 <div className="flex items-center">
-                    <Link href="/" className="flex items-center gap-3 transition-opacity hover:opacity-90">
+                    <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-90">
                         <div className="bg-white rounded-lg px-2 py-1 flex items-center justify-center">
                             <Image
                                 src="/logo.png"
@@ -37,24 +37,24 @@ export async function Navbar() {
                                 className="h-9 w-auto object-contain"
                             />
                         </div>
-                        <span className="text-xl font-bold text-white tracking-tight hidden sm:block">
+                        <span className="text-base font-bold text-white tracking-tight hidden lg:block">
                             RHC Pedidos
                         </span>
                     </Link>
                 </div>
 
                 {/* Desktop Navigation */}
-                <div className="hidden md:flex items-center gap-1 lg:gap-2 ml-4 lg:ml-8">
+                <div className="hidden md:flex items-center gap-0.5">
                     <Link
                         href="/"
-                        className="px-4 py-2 rounded-md text-sm font-medium text-white transition-colors bg-[#001250]"
+                        className="px-3 py-1.5 rounded-md text-xs font-medium text-white transition-colors bg-[#001250]"
                     >
                         Dashboard
                     </Link>
                     {mod?.pedidos !== false && (
                         <Link
                             href="/dashboard/pedidos/novo"
-                            className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
+                            className="px-3 py-1.5 rounded-md text-xs font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
                         >
                             Novo Pedido
                         </Link>
@@ -62,7 +62,7 @@ export async function Navbar() {
                     {mod?.historico !== false && (
                         <Link
                             href="/dashboard/historico"
-                            className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
+                            className="px-3 py-1.5 rounded-md text-xs font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
                         >
                             Histórico
                         </Link>
@@ -70,7 +70,7 @@ export async function Navbar() {
                     {mod?.relatorios && (
                         <Link
                             href="/dashboard/relatorios"
-                            className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
+                            className="px-3 py-1.5 rounded-md text-xs font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
                         >
                             Relatórios
                         </Link>
@@ -78,7 +78,7 @@ export async function Navbar() {
                     {mod?.bionexo && (
                         <Link
                             href="/dashboard/bionexo"
-                            className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
+                            className="px-3 py-1.5 rounded-md text-xs font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
                         >
                             Bionexo
                         </Link>
@@ -86,7 +86,7 @@ export async function Navbar() {
                     {mod?.itens && (
                         <Link
                             href="/dashboard/itens"
-                            className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
+                            className="px-3 py-1.5 rounded-md text-xs font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
                         >
                             Itens
                         </Link>
@@ -94,7 +94,7 @@ export async function Navbar() {
                     {mod?.usuarios && (
                         <Link
                             href="/dashboard/usuarios"
-                            className="px-4 py-2 rounded-md text-sm font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
+                            className="px-3 py-1.5 rounded-md text-xs font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
                         >
                             Usuários
                         </Link>
