@@ -35,7 +35,7 @@ async function fetchPedidos(currentUser: Usuario | null): Promise<any[]> {
     let query = supabase
         .from('pedidos')
         .select('id, numero_pedido, status, data_pedido, unidades(nome), usuario_id')
-        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
         .limit(200);
 
     if (scope === 'operador' && hasRealId(currentUser?.id)) {
@@ -43,7 +43,10 @@ async function fetchPedidos(currentUser: Usuario | null): Promise<any[]> {
     }
 
     const { data, error } = await query;
-    if (error) console.error('fetchPedidos error:', error);
+    if (error) {
+        console.error('fetchPedidos error:', JSON.stringify(error));
+        alert(`Erro ao carregar pedidos: ${error.message}`);
+    }
     return data ?? [];
 }
 
