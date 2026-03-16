@@ -1,5 +1,68 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// ── Node.js polyfills required by pdfjs-dist ───────────────────────────────────
+
+if (typeof (globalThis as any).DOMMatrix === 'undefined') {
+    (globalThis as any).DOMMatrix = class DOMMatrix {
+        a: number; b: number; c: number; d: number; e: number; f: number;
+        m11: number; m12: number; m13: number; m14: number;
+        m21: number; m22: number; m23: number; m24: number;
+        m31: number; m32: number; m33: number; m34: number;
+        m41: number; m42: number; m43: number; m44: number;
+        is2D = true; isIdentity = false;
+
+        constructor(init?: number[] | string) {
+            if (Array.isArray(init) && init.length >= 6) {
+                this.a = init[0]; this.b = init[1];
+                this.c = init[2]; this.d = init[3];
+                this.e = init[4]; this.f = init[5];
+            } else {
+                this.a = 1; this.b = 0; this.c = 0;
+                this.d = 1; this.e = 0; this.f = 0;
+            }
+            this.m11 = this.a;  this.m12 = this.b;  this.m13 = 0; this.m14 = 0;
+            this.m21 = this.c;  this.m22 = this.d;  this.m23 = 0; this.m24 = 0;
+            this.m31 = 0;       this.m32 = 0;       this.m33 = 1; this.m34 = 0;
+            this.m41 = this.e;  this.m42 = this.f;  this.m43 = 0; this.m44 = 1;
+            this.isIdentity = (this.a === 1 && this.b === 0 && this.c === 0 && this.d === 1 && this.e === 0 && this.f === 0);
+        }
+
+        multiply(o: DOMMatrix): DOMMatrix {
+            return new (DOMMatrix as any)([
+                this.a * o.a + this.c * o.b, this.b * o.a + this.d * o.b,
+                this.a * o.c + this.c * o.d, this.b * o.c + this.d * o.d,
+                this.a * o.e + this.c * o.f + this.e,
+                this.b * o.e + this.d * o.f + this.f,
+            ]);
+        }
+
+        transformPoint(p: { x: number; y: number }) {
+            return { x: this.a * p.x + this.c * p.y + this.e, y: this.b * p.x + this.d * p.y + this.f, z: 0, w: 1 };
+        }
+
+        translate(tx: number, ty: number): DOMMatrix {
+            return new (DOMMatrix as any)([this.a, this.b, this.c, this.d, this.e + tx, this.f + ty]);
+        }
+
+        scale(sx: number, sy?: number): DOMMatrix {
+            const sY = sy ?? sx;
+            return new (DOMMatrix as any)([this.a * sx, this.b * sx, this.c * sY, this.d * sY, this.e, this.f]);
+        }
+
+        inverse(): DOMMatrix {
+            const det = this.a * this.d - this.b * this.c;
+            if (det === 0) return new (DOMMatrix as any)();
+            return new (DOMMatrix as any)([
+                this.d / det, -this.b / det, -this.c / det, this.a / det,
+                (this.c * this.f - this.d * this.e) / det,
+                (this.b * this.e - this.a * this.f) / det,
+            ]);
+        }
+
+        toString() { return `matrix(${this.a},${this.b},${this.c},${this.d},${this.e},${this.f})`; }
+    };
+}
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type Word = { text: string; x0: number; x1: number; top: number };
