@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Plus, Trash2, ArrowLeft, Save, Package, Download } from 'lucide-react';
 import Link from 'next/link';
@@ -61,8 +60,6 @@ interface Props {
 }
 
 export default function NovoPedidoClient({ currentUser }: Props) {
-    const router = useRouter();
-
     const isOperador = (currentUser?.permissoes?.scope ?? 'operador') === 'operador';
     const userUnidadeId = currentUser?.unidade_id ?? null;
 
@@ -206,8 +203,7 @@ export default function NovoPedidoClient({ currentUser }: Props) {
                 .insert(selectedItens.map(item => ({ pedido_id: newOrder.id, item_id: item.id, quantidade: item.quantidade })));
             if (itemsError) throw itemsError;
 
-            router.refresh();
-            router.push('/');
+            window.location.href = '/';
         } catch (error: any) {
             console.error('Error submitting order:', error);
             const msg = error?.message || error?.details || error?.hint || JSON.stringify(error);
