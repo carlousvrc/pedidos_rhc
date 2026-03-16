@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { FileText, Clock, CheckCircle, Plus, RefreshCw, ShoppingCart } from 'lucide-react';
+import { FileText, Clock, CheckCircle, Plus, RefreshCw, ShoppingCart, Search, X } from 'lucide-react';
 import type { Usuario } from '@/lib/auth';
 
 interface DashboardClientProps {
@@ -23,10 +23,14 @@ function getStatusBadge(status: string) {
     }
 }
 
-
 export default function DashboardClient({ currentUser, initialPedidos }: DashboardClientProps) {
     const [pedidos, setPedidos] = useState<any[]>(initialPedidos);
     const [updating, setUpdating] = useState(false);
+
+    const [filterNumero, setFilterNumero] = useState('');
+    const [filterUnidade, setFilterUnidade] = useState('');
+    const [filterData, setFilterData] = useState('');
+    const [filterStatus, setFilterStatus] = useState('');
 
     useEffect(() => {
         const channel = supabase
@@ -39,7 +43,7 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
                     .order('data_pedido', { ascending: false })
                     .limit(50)
                     .then(({ data }) => {
-                        if (data && data.length > 0) {
+                        if (data) {
                             const scope = currentUser?.permissoes?.scope ?? 'operador';
                             const filtered =
                                 scope === 'operador' && hasRealId(currentUser?.id)
@@ -52,9 +56,7 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
             })
             .subscribe();
 
-        return () => {
-            supabase.removeChannel(channel);
-        };
+        return () => { supabase.removeChannel(channel); };
     }, [currentUser]);
 
     const scope = currentUser?.permissoes?.scope ?? 'operador';
@@ -63,15 +65,42 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
             ? pedidos.filter((p: any) => p.usuario_id === currentUser!.id)
             : pedidos;
 
+    // Unique unidades for filter dropdown
+    const unidadesDisponiveis = useMemo(() => {
+        const nomes = new Set(visiblePedidos.map((p: any) => p.unidades?.nome).filter(Boolean));
+        return Array.from(nomes).sort() as string[];
+    }, [visiblePedidos]);
+
+    const filteredPedidos = useMemo(() => {
+        return visiblePedidos.filter((p: any) => {
+            if (filterNumero && !p.numero_pedido?.includes(filterNumero)) return false;
+            if (filterUnidade && p.unidades?.nome !== filterUnidade) return false;
+            if (filterStatus && p.status?.toLowerCase() !== filterStatus.toLowerCase()) return false;
+            if (filterData) {
+                const pedidoDate = new Date(p.data_pedido).toISOString().slice(0, 10);
+                if (pedidoDate !== filterData) return false;
+            }
+            return true;
+        });
+    }, [visiblePedidos, filterNumero, filterUnidade, filterData, filterStatus]);
+
     const totalPedidos = visiblePedidos.length;
     const pendentes = visiblePedidos.filter((p: any) => p.status?.toLowerCase() === 'pendente').length;
     const realizados = visiblePedidos.filter((p: any) => p.status?.toLowerCase() === 'realizado').length;
     const recebidos = visiblePedidos.filter((p: any) => p.status?.toLowerCase() === 'recebido').length;
 
     const canCreateOrder = !currentUser || currentUser?.permissoes?.modulos?.pedidos !== false;
+    const hasFilters = filterNumero || filterUnidade || filterData || filterStatus;
+
+    function clearFilters() {
+        setFilterNumero('');
+        setFilterUnidade('');
+        setFilterData('');
+        setFilterStatus('');
+    }
 
     return (
-        <div className="max-w-[1400px] mx-auto space-y-8">
+        <div className="max-w-[1400px] mx-auto space-y-6">
 
             {/* Page Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -100,7 +129,6 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
 
             {/* Status Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Total */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
                     <div className="flex items-center justify-between mb-3">
                         <div className="p-2 bg-blue-50 text-[#001A72] rounded-lg">
@@ -115,7 +143,6 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
                     </div>
                 </div>
 
-                {/* Pendente */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
                     <div className="flex items-center justify-between mb-3">
                         <div className="p-2 bg-orange-50 text-orange-500 rounded-lg">
@@ -126,14 +153,10 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
                     <p className="text-sm font-medium text-slate-700">Pendentes</p>
                     <p className="text-xs text-slate-400 mt-0.5">Aguardando comprador</p>
                     <div className="mt-3 h-1.5 rounded-full bg-slate-100">
-                        <div
-                            className="h-1.5 rounded-full bg-orange-400 transition-all"
-                            style={{ width: totalPedidos ? `${(pendentes / totalPedidos) * 100}%` : '0%' }}
-                        />
+                        <div className="h-1.5 rounded-full bg-orange-400 transition-all" style={{ width: totalPedidos ? `${(pendentes / totalPedidos) * 100}%` : '0%' }} />
                     </div>
                 </div>
 
-                {/* Realizado */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
                     <div className="flex items-center justify-between mb-3">
                         <div className="p-2 bg-blue-50 text-[#001A72] rounded-lg">
@@ -144,14 +167,10 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
                     <p className="text-sm font-medium text-slate-700">Realizados</p>
                     <p className="text-xs text-slate-400 mt-0.5">Processados pelo comprador</p>
                     <div className="mt-3 h-1.5 rounded-full bg-slate-100">
-                        <div
-                            className="h-1.5 rounded-full bg-[#001A72] transition-all"
-                            style={{ width: totalPedidos ? `${(realizados / totalPedidos) * 100}%` : '0%' }}
-                        />
+                        <div className="h-1.5 rounded-full bg-[#001A72] transition-all" style={{ width: totalPedidos ? `${(realizados / totalPedidos) * 100}%` : '0%' }} />
                     </div>
                 </div>
 
-                {/* Recebido */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
                     <div className="flex items-center justify-between mb-3">
                         <div className="p-2 bg-green-50 text-green-600 rounded-lg">
@@ -162,56 +181,99 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
                     <p className="text-sm font-medium text-slate-700">Recebidos</p>
                     <p className="text-xs text-slate-400 mt-0.5">Confirmados pelo solicitante</p>
                     <div className="mt-3 h-1.5 rounded-full bg-slate-100">
-                        <div
-                            className="h-1.5 rounded-full bg-green-500 transition-all"
-                            style={{ width: totalPedidos ? `${(recebidos / totalPedidos) * 100}%` : '0%' }}
-                        />
+                        <div className="h-1.5 rounded-full bg-green-500 transition-all" style={{ width: totalPedidos ? `${(recebidos / totalPedidos) * 100}%` : '0%' }} />
                     </div>
                 </div>
             </div>
 
             {/* Orders Table */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center">
-                    <h2 className="text-lg font-bold text-slate-800">Últimos Pedidos Registrados</h2>
+                <div className="px-6 py-5 border-b border-slate-100">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <h2 className="text-lg font-bold text-slate-800">Pedidos Registrados</h2>
+                        {hasFilters && (
+                            <button
+                                onClick={clearFilters}
+                                className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-500 transition-colors"
+                            >
+                                <X className="w-3.5 h-3.5" />
+                                Limpar filtros
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Filters */}
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                            <input
+                                type="text"
+                                placeholder="Nº do pedido..."
+                                value={filterNumero}
+                                onChange={e => setFilterNumero(e.target.value)}
+                                className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#001A72] focus:bg-white transition-colors"
+                            />
+                        </div>
+
+                        <select
+                            value={filterUnidade}
+                            onChange={e => setFilterUnidade(e.target.value)}
+                            className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#001A72] focus:bg-white transition-colors"
+                        >
+                            <option value="">Todas as unidades</option>
+                            {unidadesDisponiveis.map(u => (
+                                <option key={u} value={u}>{u}</option>
+                            ))}
+                        </select>
+
+                        <input
+                            type="date"
+                            value={filterData}
+                            onChange={e => setFilterData(e.target.value)}
+                            className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#001A72] focus:bg-white transition-colors"
+                        />
+
+                        <select
+                            value={filterStatus}
+                            onChange={e => setFilterStatus(e.target.value)}
+                            className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#001A72] focus:bg-white transition-colors"
+                        >
+                            <option value="">Todos os status</option>
+                            <option value="pendente">Pendente</option>
+                            <option value="realizado">Realizado</option>
+                            <option value="recebido">Recebido</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-slate-100">
                         <thead className="bg-slate-50">
                             <tr>
-                                <th className="px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
-                                    Nº Pedido
-                                </th>
-                                <th className="px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
-                                    Unidade
-                                </th>
-                                <th className="px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
-                                    Data
-                                </th>
-                                <th className="px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
-                                    Status
-                                </th>
-                                <th className="px-6 py-3.5 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">
-                                    Ações
-                                </th>
+                                <th className="px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Nº Pedido</th>
+                                <th className="px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Unidade</th>
+                                <th className="px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Data</th>
+                                <th className="px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                                {scope !== 'operador' && (
+                                    <th className="px-6 py-3.5 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Ações</th>
+                                )}
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-100">
-                            {visiblePedidos.length === 0 ? (
+                            {filteredPedidos.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
-                                        Nenhum pedido encontrado no sistema.
+                                    <td colSpan={scope !== 'operador' ? 5 : 4} className="px-6 py-12 text-center text-slate-500">
+                                        {hasFilters ? 'Nenhum pedido encontrado com os filtros aplicados.' : 'Nenhum pedido encontrado.'}
                                     </td>
                                 </tr>
                             ) : (
-                                visiblePedidos.map((pedido: any) => (
+                                filteredPedidos.map((pedido: any) => (
                                     <tr key={pedido.id} className="hover:bg-slate-50/50 transition-colors group">
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
-                                            <Link href={`/dashboard/pedidos/${pedido.id}`} className="hover:text-[#001A72] flex items-center gap-2">
-                                                <FileText className="w-4 h-4 text-slate-400 group-hover:text-[#001A72]" />
+                                            <div className="flex items-center gap-2">
+                                                <FileText className="w-4 h-4 text-slate-400" />
                                                 #{pedido.numero_pedido}
-                                            </Link>
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
                                             {pedido.unidades?.nome || 'Não informada'}
@@ -224,20 +286,29 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
                                                 {pedido.status}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <Link
-                                                href={`/dashboard/pedidos/${pedido.id}`}
-                                                className="text-[#001A72] hover:text-[#001250] bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-md transition-colors"
-                                            >
-                                                Visualizar
-                                            </Link>
-                                        </td>
+                                        {scope !== 'operador' && (
+                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                                <Link
+                                                    href={`/dashboard/pedidos/${pedido.id}`}
+                                                    className="text-[#001A72] hover:text-[#001250] bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-md transition-colors"
+                                                >
+                                                    Visualizar
+                                                </Link>
+                                            </td>
+                                        )}
                                     </tr>
                                 ))
                             )}
                         </tbody>
                     </table>
                 </div>
+
+                {filteredPedidos.length > 0 && (
+                    <div className="px-6 py-3 border-t border-slate-50 text-xs text-slate-400">
+                        {filteredPedidos.length} pedido{filteredPedidos.length !== 1 ? 's' : ''} exibido{filteredPedidos.length !== 1 ? 's' : ''}
+                        {hasFilters && totalPedidos !== filteredPedidos.length && ` (de ${totalPedidos} no total)`}
+                    </div>
+                )}
             </div>
 
         </div>
