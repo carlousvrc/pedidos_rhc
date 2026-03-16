@@ -22,9 +22,10 @@ interface Props {
 }
 
 export default function ItemAddModal({ item, initialQty, mode, onConfirm, onCancel }: Props) {
-    const [qty, setQty] = useState(initialQty);
+    const [qtyStr, setQtyStr] = useState(String(initialQty));
 
-    const change = (delta: number) => setQty(q => Math.max(1, q + delta));
+    const qty = Math.max(1, parseInt(qtyStr) || 1);
+    const change = (delta: number) => setQtyStr(String(Math.max(1, qty + delta)));
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -72,8 +73,9 @@ export default function ItemAddModal({ item, initialQty, mode, onConfirm, onCanc
                         <button type="button" onClick={() => change(-1)}
                             className="px-5 py-3 bg-slate-50 text-slate-600 hover:bg-slate-100 transition-colors font-bold text-lg">−</button>
                         <input
-                            type="number" min={1} value={qty}
-                            onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) setQty(v); }}
+                            type="number" min={1} value={qtyStr}
+                            onChange={e => setQtyStr(e.target.value)}
+                            onBlur={() => setQtyStr(String(qty))}
                             className="w-20 py-3 text-xl font-bold text-center border-x border-slate-200 focus:outline-none focus:bg-blue-50"
                         />
                         <button type="button" onClick={() => change(1)}
@@ -87,7 +89,7 @@ export default function ItemAddModal({ item, initialQty, mode, onConfirm, onCanc
                         className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
                         Cancelar
                     </button>
-                    <button type="button" onClick={() => onConfirm(qty)}
+                    <button type="button" onClick={() => onConfirm(qty)} disabled={!qtyStr || parseInt(qtyStr) < 1}
                         className="px-4 py-2 text-sm font-medium text-white bg-[#001A72] hover:bg-[#001250] rounded-lg transition-colors">
                         {mode === 'add' ? 'Adicionar ao Pedido' : 'Salvar Quantidade'}
                     </button>
