@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { FileText, Clock, CheckCircle, Plus, RefreshCw } from 'lucide-react';
+import { FileText, Clock, CheckCircle, Plus, RefreshCw, ShoppingCart } from 'lucide-react';
 import type { Usuario } from '@/lib/auth';
 
 interface DashboardClientProps {
@@ -20,7 +20,6 @@ function getStatusBadge(status: string) {
     }
 }
 
-const STEPS = ['Pendente', 'Realizado', 'Recebido'];
 
 export default function DashboardClient({ currentUser, initialPedidos }: DashboardClientProps) {
     const [pedidos, setPedidos] = useState<any[]>(initialPedidos);
@@ -96,83 +95,74 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
                 </div>
             </div>
 
-            {/* Progress Steps */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Fluxo de Pedidos</p>
-                <div className="flex items-center gap-0">
-                    {STEPS.map((step, idx) => {
-                        const count =
-                            step === 'Pendente' ? pendentes :
-                            step === 'Realizado' ? realizados :
-                            recebidos;
-                        const colors =
-                            step === 'Pendente' ? 'bg-orange-500 text-white' :
-                            step === 'Realizado' ? 'bg-[#001A72] text-white' :
-                            'bg-green-500 text-white';
-                        return (
-                            <div key={step} className="flex items-center flex-1">
-                                <div className="flex-1 flex flex-col items-center gap-1">
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${colors}`}>
-                                        {count}
-                                    </div>
-                                    <span className="text-xs font-medium text-slate-600">{step}</span>
-                                </div>
-                                {idx < STEPS.length - 1 && (
-                                    <div className="flex-1 h-0.5 bg-slate-200 mx-2" />
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
-
-            {/* Summary Widgets */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Total Card */}
-                <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                    <div className="p-5 flex items-center gap-4">
-                        <div className="p-3 bg-blue-50 text-[#001A72] rounded-lg">
-                            <FileText className="w-6 h-6" />
+            {/* Status Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Total */}
+                <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="p-2 bg-blue-50 text-[#001A72] rounded-lg">
+                            <ShoppingCart className="w-5 h-5" />
                         </div>
-                        <div>
-                            <p className="text-slate-500 text-sm font-medium">Total de Pedidos</p>
-                            <p className="text-3xl font-bold text-slate-900">{totalPedidos}</p>
-                        </div>
+                        <span className="text-3xl font-bold text-slate-900">{totalPedidos}</span>
                     </div>
-                    <div className="bg-blue-50/50 px-5 py-2 border-t border-slate-50">
-                        <span className="text-[10px] font-bold text-[#001A72] uppercase tracking-wider">Histórico Recente</span>
+                    <p className="text-sm font-medium text-slate-700">Total de Pedidos</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Todos os registros</p>
+                    <div className="mt-3 h-1.5 rounded-full bg-slate-100">
+                        <div className="h-1.5 rounded-full bg-[#001A72]" style={{ width: '100%' }} />
                     </div>
                 </div>
 
-                {/* Pendentes Card */}
-                <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                    <div className="p-5 flex items-center gap-4">
-                        <div className="p-3 bg-orange-50 text-orange-600 rounded-lg">
-                            <Clock className="w-6 h-6" />
+                {/* Pendente */}
+                <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="p-2 bg-orange-50 text-orange-500 rounded-lg">
+                            <Clock className="w-5 h-5" />
                         </div>
-                        <div>
-                            <p className="text-slate-500 text-sm font-medium">Aguardando Comprador</p>
-                            <p className="text-3xl font-bold text-slate-900">{pendentes}</p>
-                        </div>
+                        <span className="text-3xl font-bold text-slate-900">{pendentes}</span>
                     </div>
-                    <div className="bg-orange-50/50 px-5 py-2 border-t border-slate-50">
-                        <span className="text-[10px] font-bold text-orange-600 uppercase tracking-wider">Pendentes</span>
+                    <p className="text-sm font-medium text-slate-700">Pendentes</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Aguardando comprador</p>
+                    <div className="mt-3 h-1.5 rounded-full bg-slate-100">
+                        <div
+                            className="h-1.5 rounded-full bg-orange-400 transition-all"
+                            style={{ width: totalPedidos ? `${(pendentes / totalPedidos) * 100}%` : '0%' }}
+                        />
                     </div>
                 </div>
 
-                {/* Recebidos Card */}
-                <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                    <div className="p-5 flex items-center gap-4">
-                        <div className="p-3 bg-green-50 text-green-600 rounded-lg">
-                            <CheckCircle className="w-6 h-6" />
+                {/* Realizado */}
+                <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="p-2 bg-blue-50 text-[#001A72] rounded-lg">
+                            <FileText className="w-5 h-5" />
                         </div>
-                        <div>
-                            <p className="text-slate-500 text-sm font-medium">Pedidos Recebidos</p>
-                            <p className="text-3xl font-bold text-slate-900">{recebidos}</p>
-                        </div>
+                        <span className="text-3xl font-bold text-slate-900">{realizados}</span>
                     </div>
-                    <div className="bg-green-50/50 px-5 py-2 border-t border-slate-50">
-                        <span className="text-[10px] font-bold text-green-600 uppercase tracking-wider">Concluídos</span>
+                    <p className="text-sm font-medium text-slate-700">Realizados</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Processados pelo comprador</p>
+                    <div className="mt-3 h-1.5 rounded-full bg-slate-100">
+                        <div
+                            className="h-1.5 rounded-full bg-[#001A72] transition-all"
+                            style={{ width: totalPedidos ? `${(realizados / totalPedidos) * 100}%` : '0%' }}
+                        />
+                    </div>
+                </div>
+
+                {/* Recebido */}
+                <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="p-2 bg-green-50 text-green-600 rounded-lg">
+                            <CheckCircle className="w-5 h-5" />
+                        </div>
+                        <span className="text-3xl font-bold text-slate-900">{recebidos}</span>
+                    </div>
+                    <p className="text-sm font-medium text-slate-700">Recebidos</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Confirmados pelo solicitante</p>
+                    <div className="mt-3 h-1.5 rounded-full bg-slate-100">
+                        <div
+                            className="h-1.5 rounded-full bg-green-500 transition-all"
+                            style={{ width: totalPedidos ? `${(recebidos / totalPedidos) * 100}%` : '0%' }}
+                        />
                     </div>
                 </div>
             </div>
