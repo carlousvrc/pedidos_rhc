@@ -206,7 +206,7 @@ export default function NovoPedidoClient({ currentUser }: Props) {
                 .insert(selectedItens.map(item => ({ pedido_id: newOrder.id, item_id: item.id, quantidade: item.quantidade })));
             if (itemsError) throw itemsError;
 
-            router.push(`/dashboard/pedidos/${newOrder.id}`);
+            router.push('/');
         } catch (error: any) {
             console.error('Error submitting order:', error);
             const msg = error?.message || error?.details || error?.hint || JSON.stringify(error);
