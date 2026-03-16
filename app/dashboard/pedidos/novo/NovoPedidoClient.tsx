@@ -53,6 +53,9 @@ const TIPO_COLORS: Record<string, string> = {
     'MEDICAMENTOS': 'bg-teal-100 text-teal-800',
 };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = (id?: string | null) => !!id && UUID_RE.test(id);
+
 interface Props {
     currentUser: Usuario | null;
 }
@@ -188,7 +191,12 @@ export default function NovoPedidoClient({ currentUser }: Props) {
 
             const { data: newOrder, error: orderError } = await supabase
                 .from('pedidos')
-                .insert({ numero_pedido: numeroPedido, unidade_id: selectedUnidade, status: 'Pendente', usuario_id: currentUser?.id ?? null })
+                .insert({
+                    numero_pedido: numeroPedido,
+                    unidade_id: isUuid(selectedUnidade) ? selectedUnidade : null,
+                    status: 'Pendente',
+                    usuario_id: isUuid(currentUser?.id) ? currentUser!.id : null,
+                })
                 .select()
                 .single();
             if (orderError) throw orderError;
