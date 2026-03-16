@@ -164,8 +164,11 @@ async function parseBionexoPdf(pdfBuffer: Buffer): Promise<Array<{ codigo: strin
     // Dynamic import avoids SSR / module resolution issues
     const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
 
-    // Disable web worker — run synchronously in Node.js main thread
-    (pdfjsLib as any).GlobalWorkerOptions.workerSrc = '';
+    // In pdfjs-dist v5 the fake worker was removed — point to the real worker file
+    const { pathToFileURL } = await import('url');
+    const { resolve } = await import('path');
+    const workerPath = resolve(process.cwd(), 'node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs');
+    (pdfjsLib as any).GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href;
 
     const loadingTask = (pdfjsLib as any).getDocument({
         data: new Uint8Array(pdfBuffer),
