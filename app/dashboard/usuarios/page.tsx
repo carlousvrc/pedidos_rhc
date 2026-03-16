@@ -360,45 +360,33 @@ export default function UsuariosPage() {
 
             {/* Modal Novo Usuário */}
             {showModal && (
-                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg my-8">
-                        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
-                            <h2 className="text-lg font-bold text-slate-800">Novo Usuário</h2>
-                            <button onClick={() => setShowModal(false)} className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
-                                <X className="w-5 h-5 text-slate-500" />
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                            <h2 className="text-base font-bold text-slate-800">Novo Usuário</h2>
+                            <button onClick={() => setShowModal(false)} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors">
+                                <X className="w-4 h-4 text-slate-500" />
                             </button>
                         </div>
 
-                        <div className="p-6 space-y-5">
+                        <div className="px-5 py-4 space-y-4">
 
-                            {/* Dados básicos */}
-                            <div className="space-y-4">
+                            {/* Linha 1: Usuário + Senha */}
+                            <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">
                                         Usuário (login) <span className="text-red-500">*</span>
                                     </label>
                                     <input
                                         type="text"
                                         value={novoForm.username}
                                         onChange={e => setNovoForm(f => ({ ...f, username: e.target.value }))}
-                                        placeholder="Ex: enfermagem.cti"
-                                        className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#001A72] bg-slate-50 focus:bg-white transition-all"
+                                        placeholder="Ex: joao.silva"
+                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#001A72] bg-slate-50 focus:bg-white transition-all"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                                        Nome Completo <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={novoForm.nome}
-                                        onChange={e => setNovoForm(f => ({ ...f, nome: e.target.value }))}
-                                        placeholder="Ex: Enfermagem CTI"
-                                        className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#001A72] bg-slate-50 focus:bg-white transition-all"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">
                                         Senha <span className="text-red-500">*</span>
                                     </label>
                                     <input
@@ -406,15 +394,31 @@ export default function UsuariosPage() {
                                         value={novoForm.senha}
                                         onChange={e => setNovoForm(f => ({ ...f, senha: e.target.value }))}
                                         placeholder="Senha de acesso"
-                                        className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#001A72] bg-slate-50 focus:bg-white transition-all"
+                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#001A72] bg-slate-50 focus:bg-white transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Linha 2: Nome + Unidade */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">
+                                        Nome Completo <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={novoForm.nome}
+                                        onChange={e => setNovoForm(f => ({ ...f, nome: e.target.value }))}
+                                        placeholder="Nome do colaborador"
+                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#001A72] bg-slate-50 focus:bg-white transition-all"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Unidade</label>
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">Unidade</label>
                                     <select
                                         value={novoForm.unidade_id}
                                         onChange={e => setNovoForm(f => ({ ...f, unidade_id: e.target.value }))}
-                                        className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#001A72] bg-slate-50 focus:bg-white transition-all"
+                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#001A72] bg-slate-50 focus:bg-white transition-all"
                                     >
                                         <option value="">Nenhuma</option>
                                         {unidades.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
@@ -422,85 +426,66 @@ export default function UsuariosPage() {
                                 </div>
                             </div>
 
-                            {/* Tipo de visualização de pedidos */}
+                            {/* Visualização de Pedidos */}
                             <div>
-                                <p className="text-sm font-semibold text-slate-700 mb-2">Visualização de Pedidos</p>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button
-                                        type="button"
-                                        onClick={() => handleScopeChange('operador')}
-                                        className={`flex flex-col items-start gap-1 p-4 rounded-xl border-2 transition-all text-left ${
-                                            novoForm.scope === 'operador'
-                                                ? 'border-[#001A72] bg-blue-50'
-                                                : 'border-slate-200 hover:border-slate-300'
-                                        }`}
-                                    >
-                                        <div className="flex items-center gap-2">
-                                            <Eye className={`w-4 h-4 ${novoForm.scope === 'operador' ? 'text-[#001A72]' : 'text-slate-400'}`} />
-                                            <span className={`text-sm font-semibold ${novoForm.scope === 'operador' ? 'text-[#001A72]' : 'text-slate-700'}`}>
-                                                Operador
-                                            </span>
-                                        </div>
-                                        <p className="text-xs text-slate-500 leading-tight">Visualiza apenas seus próprios pedidos</p>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleScopeChange('admin')}
-                                        className={`flex flex-col items-start gap-1 p-4 rounded-xl border-2 transition-all text-left ${
-                                            novoForm.scope === 'admin'
-                                                ? 'border-[#001A72] bg-blue-50'
-                                                : 'border-slate-200 hover:border-slate-300'
-                                        }`}
-                                    >
-                                        <div className="flex items-center gap-2">
-                                            <ShieldCheck className={`w-4 h-4 ${novoForm.scope === 'admin' ? 'text-[#001A72]' : 'text-slate-400'}`} />
-                                            <span className={`text-sm font-semibold ${novoForm.scope === 'admin' ? 'text-[#001A72]' : 'text-slate-700'}`}>
-                                                Admin
-                                            </span>
-                                        </div>
-                                        <p className="text-xs text-slate-500 leading-tight">Visualiza todos os pedidos do sistema</p>
-                                    </button>
+                                <p className="text-xs font-medium text-slate-600 mb-1.5">Visualização de Pedidos</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {([
+                                        { value: 'operador', icon: Eye, label: 'Operador', sub: 'Apenas seus pedidos' },
+                                        { value: 'admin', icon: ShieldCheck, label: 'Admin', sub: 'Todos os pedidos' },
+                                    ] as const).map(({ value, icon: Icon, label, sub }) => (
+                                        <button
+                                            key={value}
+                                            type="button"
+                                            onClick={() => handleScopeChange(value)}
+                                            className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border-2 transition-all text-left ${
+                                                novoForm.scope === value
+                                                    ? 'border-[#001A72] bg-blue-50'
+                                                    : 'border-slate-200 hover:border-slate-300'
+                                            }`}
+                                        >
+                                            <Icon className={`w-4 h-4 shrink-0 ${novoForm.scope === value ? 'text-[#001A72]' : 'text-slate-400'}`} />
+                                            <div>
+                                                <p className={`text-sm font-semibold leading-none ${novoForm.scope === value ? 'text-[#001A72]' : 'text-slate-700'}`}>{label}</p>
+                                                <p className="text-[11px] text-slate-400 mt-0.5">{sub}</p>
+                                            </div>
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
 
-                            {/* Permissões por módulo */}
+                            {/* Módulos */}
                             <div>
-                                <p className="text-sm font-semibold text-slate-700 mb-2">Acesso aos Módulos</p>
-                                <div className="space-y-2 border border-slate-100 rounded-xl p-4 bg-slate-50">
-                                    {MODULO_LABELS.map(({ key, label, desc }) => (
-                                        <label
+                                <p className="text-xs font-medium text-slate-600 mb-1.5">Acesso aos Módulos</p>
+                                <div className="grid grid-cols-3 gap-1.5">
+                                    {MODULO_LABELS.map(({ key, label }) => (
+                                        <button
                                             key={key}
-                                            className="flex items-center justify-between gap-3 cursor-pointer group"
+                                            type="button"
+                                            onClick={() => toggleModulo(key)}
+                                            className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
+                                                novoForm.modulos[key]
+                                                    ? 'border-[#001A72] bg-blue-50 text-[#001A72]'
+                                                    : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                                            }`}
                                         >
-                                            <div className="flex-1 min-w-0">
-                                                <span className="text-sm font-medium text-slate-700">{label}</span>
-                                                <p className="text-xs text-slate-400">{desc}</p>
+                                            <div className={`w-3.5 h-3.5 rounded border-2 shrink-0 flex items-center justify-center transition-all ${
+                                                novoForm.modulos[key] ? 'border-[#001A72] bg-[#001A72]' : 'border-slate-300'
+                                            }`}>
+                                                {novoForm.modulos[key] && (
+                                                    <svg className="w-2 h-2 text-white" fill="none" viewBox="0 0 10 8">
+                                                        <path d="M1 4l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                                    </svg>
+                                                )}
                                             </div>
-                                            <div className="relative shrink-0">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={novoForm.modulos[key]}
-                                                    onChange={() => toggleModulo(key)}
-                                                    className="sr-only"
-                                                />
-                                                <div
-                                                    onClick={() => toggleModulo(key)}
-                                                    className={`w-11 h-6 rounded-full transition-colors cursor-pointer ${
-                                                        novoForm.modulos[key] ? 'bg-[#001A72]' : 'bg-slate-300'
-                                                    }`}
-                                                >
-                                                    <div className={`w-5 h-5 bg-white rounded-full shadow-sm transition-transform mt-0.5 mx-0.5 ${
-                                                        novoForm.modulos[key] ? 'translate-x-5' : 'translate-x-0'
-                                                    }`} />
-                                                </div>
-                                            </div>
-                                        </label>
+                                            {label}
+                                        </button>
                                     ))}
                                 </div>
                             </div>
                         </div>
 
-                        <div className="px-6 py-5 border-t border-slate-100 flex justify-end gap-3">
+                        <div className="px-5 py-4 border-t border-slate-100 flex justify-end gap-2">
                             <button
                                 onClick={() => setShowModal(false)}
                                 className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
@@ -510,7 +495,7 @@ export default function UsuariosPage() {
                             <button
                                 onClick={handleCriarUsuario}
                                 disabled={criando}
-                                className="flex items-center gap-2 px-5 py-2 bg-[#001A72] text-white rounded-lg text-sm font-medium hover:bg-[#001250] transition-colors disabled:opacity-50"
+                                className="flex items-center gap-2 px-4 py-2 bg-[#001A72] text-white rounded-lg text-sm font-medium hover:bg-[#001250] transition-colors disabled:opacity-50"
                             >
                                 <UserPlus className="w-4 h-4" />
                                 {criando ? 'Criando...' : 'Criar Usuário'}
