@@ -11,6 +11,9 @@ interface DashboardClientProps {
     initialPedidos: any[];
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const hasRealId = (id?: string | null) => !!id && UUID_RE.test(id);
+
 function getStatusBadge(status: string) {
     switch (status?.toLowerCase()) {
         case 'pendente': return 'bg-orange-100 text-orange-800';
@@ -39,8 +42,8 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
                         if (data && data.length > 0) {
                             const scope = currentUser?.permissoes?.scope ?? 'operador';
                             const filtered =
-                                scope === 'operador' && currentUser
-                                    ? data.filter((p: any) => p.usuario_id === currentUser.id)
+                                scope === 'operador' && hasRealId(currentUser?.id)
+                                    ? data.filter((p: any) => p.usuario_id === currentUser!.id)
                                     : data;
                             setPedidos(filtered);
                         }
@@ -56,8 +59,8 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
 
     const scope = currentUser?.permissoes?.scope ?? 'operador';
     const visiblePedidos =
-        scope === 'operador' && currentUser
-            ? pedidos.filter((p: any) => p.usuario_id === currentUser.id)
+        scope === 'operador' && hasRealId(currentUser?.id)
+            ? pedidos.filter((p: any) => p.usuario_id === currentUser!.id)
             : pedidos;
 
     const totalPedidos = visiblePedidos.length;
