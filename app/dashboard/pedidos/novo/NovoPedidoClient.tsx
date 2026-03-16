@@ -188,7 +188,7 @@ export default function NovoPedidoClient({ currentUser }: Props) {
 
             const { data: newOrder, error: orderError } = await supabase
                 .from('pedidos')
-                .insert({ numero_pedido: numeroPedido, unidade_id: selectedUnidade, status: 'Pendente' })
+                .insert({ numero_pedido: numeroPedido, unidade_id: selectedUnidade, status: 'Pendente', usuario_id: currentUser?.id ?? null })
                 .select()
                 .single();
             if (orderError) throw orderError;
