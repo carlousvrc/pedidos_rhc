@@ -6,7 +6,6 @@ import { supabase } from '@/lib/supabase';
 import { mockPedidos, mockPedidosItens, mockItens } from '@/lib/mockData';
 import type { Usuario } from '@/lib/auth';
 import { ChevronRight, Download, Save, Upload, RefreshCw, CheckCircle2 } from 'lucide-react';
-import Papa from 'papaparse';
 
 interface PedidoDetailProps {
     id: string;
@@ -274,23 +273,13 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
 
     function handleExportCsv() {
         if (!pedido) return;
-        const rows = items.map((item, idx) => ({
-            '#': idx + 1,
-            Produto: item.itens.nome,
-            Codigo: item.itens.codigo,
-            Tipo: item.itens.tipo || '',
-            Qtd_Pedida: item.quantidade,
-            Qtd_Atendida: item.quantidade_atendida,
-            Diferenca: item.quantidade_atendida - item.quantidade,
-            Qtd_Recebida: localEdits[item.id]?.quantidade_recebida ?? item.quantidade_recebida,
-            Observacao: localEdits[item.id]?.observacao ?? item.observacao,
-        }));
-        const csv = Papa.unparse(rows, { delimiter: ';', header: true });
-        const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+        const lines = items.map(item => `${item.itens.codigo};${item.quantidade}`);
+        const csv = lines.join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `Pedido_${pedido.numero_pedido}_${pedido.unidades?.nome || 'Unidade'}.csv`;
+        a.download = `Pedido_${pedido.numero_pedido}.csv`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
