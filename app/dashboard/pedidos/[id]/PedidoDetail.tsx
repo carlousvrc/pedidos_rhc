@@ -391,63 +391,99 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
 
             {/* Comprador Section */}
             {canComprador && (
-                <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 space-y-4">
-                    <h2 className="text-lg font-bold text-slate-800">Área do Comprador</h2>
+                <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                        <h2 className="text-lg font-bold text-slate-800">Área do Comprador</h2>
+                        {status === 'Pendente' && (
+                            <span className="text-xs bg-orange-100 text-orange-700 font-semibold px-2.5 py-1 rounded-full">
+                                Aguardando processamento
+                            </span>
+                        )}
+                        {status === 'Realizado' && (
+                            <span className="flex items-center gap-1.5 text-xs bg-green-100 text-green-700 font-semibold px-2.5 py-1 rounded-full">
+                                <CheckCircle2 className="w-3.5 h-3.5" /> PDF processado
+                            </span>
+                        )}
+                    </div>
 
                     {status === 'Pendente' && (
-                        <div className="space-y-3">
-                            <p className="text-sm text-slate-600">Faça o upload do PDF do Bionexo para processar as quantidades atendidas.</p>
-                            <div
-                                className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center cursor-pointer hover:border-[#001A72] transition-colors"
-                                onClick={() => fileRef.current?.click()}
-                            >
-                                <Upload className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                                {pdfFiles.length > 0 ? (
-                                    <div className="space-y-1">
-                                        {pdfFiles.map((f, i) => (
-                                            <p key={i} className="text-sm font-medium text-[#001A72]">{f.name}</p>
-                                        ))}
-                                        <p className="text-xs text-slate-400 mt-2">{pdfFiles.length} arquivo(s) selecionado(s)</p>
+                        <div className="p-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                                {/* Passo 1 */}
+                                <div className="flex flex-col gap-4 p-5 rounded-xl border-2 border-[#001A72]/20 bg-blue-50/40">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-full bg-[#001A72] text-white flex items-center justify-center text-sm font-bold shrink-0">1</div>
+                                        <div>
+                                            <p className="font-semibold text-slate-800 text-sm">Baixar CSV do Pedido</p>
+                                            <p className="text-xs text-slate-500 mt-0.5">Envie para a plataforma de cotação</p>
+                                        </div>
                                     </div>
-                                ) : (
-                                    <>
-                                        <p className="text-sm text-slate-500">Clique para selecionar os PDFs do Bionexo</p>
-                                        <p className="text-xs text-slate-400 mt-1">Múltiplos arquivos .pdf permitidos</p>
-                                    </>
-                                )}
-                                <input
-                                    ref={fileRef}
-                                    type="file"
-                                    accept=".pdf"
-                                    multiple
-                                    className="hidden"
-                                    onChange={e => {
-                                        setPdfFiles(Array.from(e.target.files || []));
-                                        setPdfError('');
-                                    }}
-                                />
+                                    <button
+                                        onClick={handleExportCsv}
+                                        className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#001A72] text-white text-sm font-medium rounded-lg hover:bg-[#001250] transition-colors"
+                                    >
+                                        <Download className="w-4 h-4" />
+                                        Baixar CSV
+                                    </button>
+                                </div>
+
+                                {/* Passo 2 */}
+                                <div className="flex flex-col gap-4 p-5 rounded-xl border-2 border-slate-200 bg-slate-50">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${pdfFiles.length > 0 ? 'bg-[#001A72] text-white' : 'bg-slate-300 text-white'}`}>2</div>
+                                        <div>
+                                            <p className="font-semibold text-slate-800 text-sm">Anexar PDF de Resposta</p>
+                                            <p className="text-xs text-slate-500 mt-0.5">Após receber o PDF, anexe e processe</p>
+                                        </div>
+                                    </div>
+                                    <div
+                                        className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${pdfFiles.length > 0 ? 'border-[#001A72] bg-blue-50' : 'border-slate-200 hover:border-[#001A72] hover:bg-slate-100'}`}
+                                        onClick={() => fileRef.current?.click()}
+                                    >
+                                        <Upload className={`w-5 h-5 mx-auto mb-1.5 ${pdfFiles.length > 0 ? 'text-[#001A72]' : 'text-slate-300'}`} />
+                                        {pdfFiles.length > 0 ? (
+                                            <div className="space-y-0.5">
+                                                {pdfFiles.map((f, i) => (
+                                                    <p key={i} className="text-xs font-medium text-[#001A72] truncate">{f.name}</p>
+                                                ))}
+                                                <p className="text-[11px] text-slate-400 mt-1">{pdfFiles.length} arquivo(s)</p>
+                                            </div>
+                                        ) : (
+                                            <p className="text-xs text-slate-400">Clique para selecionar PDFs</p>
+                                        )}
+                                        <input
+                                            ref={fileRef}
+                                            type="file"
+                                            accept=".pdf"
+                                            multiple
+                                            className="hidden"
+                                            onChange={e => { setPdfFiles(Array.from(e.target.files || [])); setPdfError(''); }}
+                                        />
+                                    </div>
+                                    {pdfError && <p className="text-xs text-red-600">{pdfError}</p>}
+                                    <button
+                                        onClick={handleProcessBionexo}
+                                        disabled={processingPdf || pdfFiles.length === 0}
+                                        className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-700 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                        {processingPdf ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                                        {processingPdf ? 'Processando...' : 'Processar PDF'}
+                                    </button>
+                                </div>
                             </div>
-                            {pdfError && <p className="text-sm text-red-600">{pdfError}</p>}
-                            <button
-                                onClick={handleProcessBionexo}
-                                disabled={processingPdf || pdfFiles.length === 0}
-                                className="flex items-center gap-2 px-5 py-2.5 bg-[#001A72] text-white rounded-lg font-medium hover:bg-[#001250] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {processingPdf ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                                {processingPdf ? 'Processando...' : 'Processar Bionexo'}
-                            </button>
                         </div>
                     )}
 
                     {status === 'Realizado' && (
-                        <div className="flex items-center gap-3">
-                            <p className="text-sm text-slate-600">PDF processado. Aguardando confirmação de recebimento pelo solicitante.</p>
+                        <div className="px-6 py-4 text-sm text-slate-600">
+                            PDF processado com sucesso. Aguardando confirmação de recebimento pelo solicitante.
                         </div>
                     )}
 
                     {/* Status change controls */}
-                    <div className="border-t border-slate-100 pt-4 flex flex-wrap gap-2">
-                        <span className="text-xs text-slate-500 self-center">Alterar status:</span>
+                    <div className="px-6 py-4 border-t border-slate-100 flex flex-wrap gap-2 items-center">
+                        <span className="text-xs text-slate-400">Alterar status manualmente:</span>
                         {STEPS.filter(s => s !== status).map(s => (
                             <button
                                 key={s}
