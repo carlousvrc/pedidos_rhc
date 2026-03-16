@@ -8,7 +8,6 @@ import type { Usuario } from '@/lib/auth';
 
 interface DashboardClientProps {
     currentUser: Usuario | null;
-    initialPedidos: any[];
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -16,15 +15,41 @@ const hasRealId = (id?: string | null) => !!id && UUID_RE.test(id);
 
 function getStatusBadge(status: string) {
     switch (status?.toLowerCase()) {
-        case 'pendente': return 'bg-orange-100 text-orange-800';
+        case 'pendente':  return 'bg-orange-100 text-orange-800';
         case 'realizado': return 'bg-blue-100 text-[#001A72]';
-        case 'recebido': return 'bg-green-100 text-green-800';
-        default: return 'bg-slate-100 text-slate-700';
+        case 'recebido':  return 'bg-green-100 text-green-800';
+        default:          return 'bg-slate-100 text-slate-700';
     }
 }
 
-export default function DashboardClient({ currentUser, initialPedidos }: DashboardClientProps) {
-    const [pedidos, setPedidos] = useState<any[]>(initialPedidos);
+function applyScope(data: any[], currentUser: Usuario | null) {
+    const scope = currentUser?.permissoes?.scope ?? 'operador';
+    if (scope === 'operador' && hasRealId(currentUser?.id)) {
+        return data.filter((p: any) => p.usuario_id === currentUser!.id);
+    }
+    return data;
+}
+
+async function fetchPedidos(currentUser: Usuario | null): Promise<any[]> {
+    const scope = currentUser?.permissoes?.scope ?? 'operador';
+    let query = supabase
+        .from('pedidos')
+        .select('id, numero_pedido, status, data_pedido, unidades(nome), usuario_id')
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+    if (scope === 'operador' && hasRealId(currentUser?.id)) {
+        query = query.eq('usuario_id', currentUser!.id);
+    }
+
+    const { data, error } = await query;
+    if (error) console.error('fetchPedidos error:', error);
+    return data ?? [];
+}
+
+export default function DashboardClient({ currentUser }: DashboardClientProps) {
+    const [pedidos, setPedidos] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
     const [updating, setUpdating] = useState(false);
 
     const [filterNumero, setFilterNumero] = useState('');
@@ -32,27 +57,25 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
     const [filterData, setFilterData] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
 
+    // Initial fetch
+    useEffect(() => {
+        setLoading(true);
+        fetchPedidos(currentUser).then(data => {
+            setPedidos(applyScope(data, currentUser));
+            setLoading(false);
+        });
+    }, [currentUser]);
+
+    // Real-time subscription
     useEffect(() => {
         const channel = supabase
             .channel('dashboard-pedidos')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => {
                 setUpdating(true);
-                supabase
-                    .from('pedidos')
-                    .select('id, numero_pedido, status, data_pedido, unidades(nome), usuario_id')
-                    .order('data_pedido', { ascending: false })
-                    .limit(50)
-                    .then(({ data }) => {
-                        if (data) {
-                            const scope = currentUser?.permissoes?.scope ?? 'operador';
-                            const filtered =
-                                scope === 'operador' && hasRealId(currentUser?.id)
-                                    ? data.filter((p: any) => p.usuario_id === currentUser!.id)
-                                    : data;
-                            setPedidos(filtered);
-                        }
-                        setTimeout(() => setUpdating(false), 800);
-                    });
+                fetchPedidos(currentUser).then(data => {
+                    setPedidos(applyScope(data, currentUser));
+                    setTimeout(() => setUpdating(false), 600);
+                });
             })
             .subscribe();
 
@@ -60,19 +83,14 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
     }, [currentUser]);
 
     const scope = currentUser?.permissoes?.scope ?? 'operador';
-    const visiblePedidos =
-        scope === 'operador' && hasRealId(currentUser?.id)
-            ? pedidos.filter((p: any) => p.usuario_id === currentUser!.id)
-            : pedidos;
 
-    // Unique unidades for filter dropdown
     const unidadesDisponiveis = useMemo(() => {
-        const nomes = new Set(visiblePedidos.map((p: any) => p.unidades?.nome).filter(Boolean));
+        const nomes = new Set(pedidos.map((p: any) => p.unidades?.nome).filter(Boolean));
         return Array.from(nomes).sort() as string[];
-    }, [visiblePedidos]);
+    }, [pedidos]);
 
     const filteredPedidos = useMemo(() => {
-        return visiblePedidos.filter((p: any) => {
+        return pedidos.filter((p: any) => {
             if (filterNumero && !p.numero_pedido?.includes(filterNumero)) return false;
             if (filterUnidade && p.unidades?.nome !== filterUnidade) return false;
             if (filterStatus && p.status?.toLowerCase() !== filterStatus.toLowerCase()) return false;
@@ -82,12 +100,12 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
             }
             return true;
         });
-    }, [visiblePedidos, filterNumero, filterUnidade, filterData, filterStatus]);
+    }, [pedidos, filterNumero, filterUnidade, filterData, filterStatus]);
 
-    const totalPedidos = visiblePedidos.length;
-    const pendentes = visiblePedidos.filter((p: any) => p.status?.toLowerCase() === 'pendente').length;
-    const realizados = visiblePedidos.filter((p: any) => p.status?.toLowerCase() === 'realizado').length;
-    const recebidos = visiblePedidos.filter((p: any) => p.status?.toLowerCase() === 'recebido').length;
+    const totalPedidos = pedidos.length;
+    const pendentes  = pedidos.filter((p: any) => p.status?.toLowerCase() === 'pendente').length;
+    const realizados = pedidos.filter((p: any) => p.status?.toLowerCase() === 'realizado').length;
+    const recebidos  = pedidos.filter((p: any) => p.status?.toLowerCase() === 'recebido').length;
 
     const canCreateOrder = !currentUser || currentUser?.permissoes?.modulos?.pedidos !== false;
     const hasFilters = filterNumero || filterUnidade || filterData || filterStatus;
@@ -109,10 +127,10 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
                     <p className="text-slate-500 mt-1 text-sm">Visão geral e acesso rápido aos pedidos hospitalares.</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    {updating && (
+                    {(loading || updating) && (
                         <span className="flex items-center gap-1.5 text-xs text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">
                             <RefreshCw className="w-3 h-3 animate-spin" />
-                            Atualizando...
+                            {loading ? 'Carregando...' : 'Atualizando...'}
                         </span>
                     )}
                     {canCreateOrder && (
@@ -189,13 +207,10 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
             {/* Orders Table */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="px-6 py-5 border-b border-slate-100">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center justify-between gap-4">
                         <h2 className="text-lg font-bold text-slate-800">Pedidos Registrados</h2>
                         {hasFilters && (
-                            <button
-                                onClick={clearFilters}
-                                className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-500 transition-colors"
-                            >
+                            <button onClick={clearFilters} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-500 transition-colors">
                                 <X className="w-3.5 h-3.5" />
                                 Limpar filtros
                             </button>
@@ -214,7 +229,6 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
                                 className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#001A72] focus:bg-white transition-colors"
                             />
                         </div>
-
                         <select
                             value={filterUnidade}
                             onChange={e => setFilterUnidade(e.target.value)}
@@ -225,14 +239,12 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
                                 <option key={u} value={u}>{u}</option>
                             ))}
                         </select>
-
                         <input
                             type="date"
                             value={filterData}
                             onChange={e => setFilterData(e.target.value)}
                             className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#001A72] focus:bg-white transition-colors"
                         />
-
                         <select
                             value={filterStatus}
                             onChange={e => setFilterStatus(e.target.value)}
@@ -260,9 +272,15 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-100">
-                            {filteredPedidos.length === 0 ? (
+                            {loading ? (
                                 <tr>
-                                    <td colSpan={scope !== 'operador' ? 5 : 4} className="px-6 py-12 text-center text-slate-500">
+                                    <td colSpan={scope !== 'operador' ? 5 : 4} className="px-6 py-12 text-center text-slate-400 text-sm">
+                                        Carregando pedidos...
+                                    </td>
+                                </tr>
+                            ) : filteredPedidos.length === 0 ? (
+                                <tr>
+                                    <td colSpan={scope !== 'operador' ? 5 : 4} className="px-6 py-12 text-center text-slate-500 text-sm">
                                         {hasFilters ? 'Nenhum pedido encontrado com os filtros aplicados.' : 'Nenhum pedido encontrado.'}
                                     </td>
                                 </tr>
@@ -279,7 +297,7 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
                                             {pedido.unidades?.nome || 'Não informada'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                                            {new Date(pedido.data_pedido).toLocaleDateString('pt-BR')}
+                                            {pedido.data_pedido ? new Date(pedido.data_pedido).toLocaleDateString('pt-BR') : '—'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <span className={`px-2.5 py-0.5 inline-flex text-[11px] leading-5 font-semibold rounded-full capitalize ${getStatusBadge(pedido.status)}`}>
@@ -303,14 +321,13 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
                     </table>
                 </div>
 
-                {filteredPedidos.length > 0 && (
+                {!loading && filteredPedidos.length > 0 && (
                     <div className="px-6 py-3 border-t border-slate-50 text-xs text-slate-400">
                         {filteredPedidos.length} pedido{filteredPedidos.length !== 1 ? 's' : ''} exibido{filteredPedidos.length !== 1 ? 's' : ''}
                         {hasFilters && totalPedidos !== filteredPedidos.length && ` (de ${totalPedidos} no total)`}
                     </div>
                 )}
             </div>
-
         </div>
     );
 }
