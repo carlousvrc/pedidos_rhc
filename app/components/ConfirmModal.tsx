@@ -1,15 +1,20 @@
 'use client';
 
-import { Trash2 } from 'lucide-react';
+import { Trash2, Package } from 'lucide-react';
 
 interface Props {
     title: string;
     description: string;
     onConfirm: () => void;
     onCancel: () => void;
+    variant?: 'danger' | 'primary';
+    confirmLabel?: string;
 }
 
-export default function ConfirmModal({ title, description, onConfirm, onCancel }: Props) {
+export default function ConfirmModal({ title, description, onConfirm, onCancel, variant = 'danger', confirmLabel }: Props) {
+    const isPrimary = variant === 'primary';
+    const label = confirmLabel ?? (isPrimary ? 'Confirmar' : 'Excluir');
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
             {/* Backdrop */}
@@ -19,8 +24,8 @@ export default function ConfirmModal({ title, description, onConfirm, onCancel }
             <div className="relative bg-white rounded-xl shadow-xl border border-slate-100 w-full max-w-sm mx-4 overflow-hidden">
                 <div className="p-6">
                     <div className="flex items-start gap-4">
-                        <div className="p-2.5 bg-red-50 text-red-500 rounded-lg shrink-0">
-                            <Trash2 className="w-5 h-5" />
+                        <div className={`p-2.5 rounded-lg shrink-0 ${isPrimary ? 'bg-blue-50 text-[#001A72]' : 'bg-red-50 text-red-500'}`}>
+                            {isPrimary ? <Package className="w-5 h-5" /> : <Trash2 className="w-5 h-5" />}
                         </div>
                         <div>
                             <h3 className="text-base font-bold text-slate-800">{title}</h3>
@@ -37,9 +42,9 @@ export default function ConfirmModal({ title, description, onConfirm, onCancel }
                     </button>
                     <button
                         onClick={onConfirm}
-                        className="px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+                        className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors ${isPrimary ? 'bg-[#001A72] hover:bg-[#001250]' : 'bg-red-500 hover:bg-red-600'}`}
                     >
-                        Excluir
+                        {label}
                     </button>
                 </div>
             </div>

@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Trash2, ArrowLeft, Save, Package } from 'lucide-react';
+import { Trash2, ArrowLeft, Save, Package, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import { mockItens, mockUnidades } from '@/lib/mockData';
 import 'tom-select/dist/css/tom-select.css';
 import type { Usuario } from '@/lib/auth';
+import ItemAddModal from '@/app/components/ItemAddModal';
+import ConfirmModal from '@/app/components/ConfirmModal';
 
 const TIPOS = [
     'B.BRAUN', 'FRALDAS', 'LIFETEX-SURGITEXTIL', 'MAT. MED. HOSPITALAR',
@@ -35,6 +37,10 @@ export default function EditarPedidoClient({ currentUser, pedido, pedidoItens }:
     const [selectedUnidade, setSelectedUnidade] = useState<string>(pedido.unidade_id ?? '');
     const [tipoFiltro, setTipoFiltro] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Modal state for item add/edit flow
+    const [itemModal, setItemModal] = useState<{ item: any; qty: number; mode: 'add' | 'edit' } | null>(null);
+    const [itemConfirm, setItemConfirm] = useState<{ item: any; qty: number; mode: 'add' | 'edit' } | null>(null);
 
     // Pre-populate items from existing order
     const [selectedItens, setSelectedItens] = useState<any[]>(
@@ -103,7 +109,7 @@ export default function EditarPedidoClient({ currentUser, pedido, pedidoItens }:
                 onItemAdd(value: string) {
                     const item = itens.find(i => i.id === value);
                     if (item && !selectedIdsRef.current.has(item.id)) {
-                        setSelectedItens(prev => [...prev, { ...item, quantidade: 1 }]);
+                        setItemModal({ item, qty: 1, mode: 'add' });
                     }
                     requestAnimationFrame(() => {
                         tomSelectRef.current?.clear(true);
@@ -127,16 +133,6 @@ export default function EditarPedidoClient({ currentUser, pedido, pedidoItens }:
     }, [itens, tipoFiltro]);
 
     const removeItem = (id: string) => setSelectedItens(prev => prev.filter(i => i.id !== id));
-
-    const updateQuantity = (id: string, qty: number) => {
-        if (qty < 1) return;
-        setSelectedItens(prev => prev.map(i => i.id === id ? { ...i, quantidade: qty } : i));
-    };
-
-    const handleQtyInput = (id: string, value: string) => {
-        const qty = parseInt(value);
-        if (!isNaN(qty) && qty >= 1) updateQuantity(id, qty);
-    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -259,16 +255,16 @@ export default function EditarPedidoClient({ currentUser, pedido, pedidoItens }:
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-3 shrink-0">
-                                                    <div className="flex items-center border border-slate-200 rounded-md overflow-hidden">
-                                                        <button type="button" onClick={() => updateQuantity(item.id, item.quantidade - 1)} className="px-3 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 transition-colors font-medium">−</button>
-                                                        <input
-                                                            type="number" min={1} value={item.quantidade}
-                                                            onChange={e => handleQtyInput(item.id, e.target.value)}
-                                                            className="w-14 py-1.5 text-sm font-medium text-center border-x border-slate-200 focus:outline-none focus:bg-blue-50"
-                                                        />
-                                                        <button type="button" onClick={() => updateQuantity(item.id, item.quantidade + 1)} className="px-3 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 transition-colors font-medium">+</button>
-                                                    </div>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    <span className="text-sm font-semibold text-slate-700 min-w-[3rem] text-right">× {item.quantidade}</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setItemModal({ item, qty: item.quantidade, mode: 'edit' })}
+                                                        className="p-2 text-slate-400 hover:text-[#001A72] hover:bg-blue-50 rounded-md transition-colors"
+                                                        title="Editar quantidade"
+                                                    >
+                                                        <Pencil className="w-4 h-4" />
+                                                    </button>
                                                     <button type="button" onClick={() => removeItem(item.id)} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors">
                                                         <Trash2 className="w-4 h-4" />
                                                     </button>
@@ -328,6 +324,42 @@ export default function EditarPedidoClient({ currentUser, pedido, pedidoItens }:
                 </div>
 
             </form>
+
+            {/* Item Add/Edit Modal */}
+            {itemModal && (
+                <ItemAddModal
+                    item={itemModal.item}
+                    initialQty={itemModal.qty}
+                    mode={itemModal.mode}
+                    onConfirm={(qty) => {
+                        setItemConfirm({ item: itemModal.item, qty, mode: itemModal.mode });
+                        setItemModal(null);
+                    }}
+                    onCancel={() => setItemModal(null)}
+                />
+            )}
+
+            {/* Item Confirmation Modal */}
+            {itemConfirm && (
+                <ConfirmModal
+                    variant="primary"
+                    title={itemConfirm.mode === 'add' ? 'Adicionar item ao pedido?' : 'Salvar alteração de quantidade?'}
+                    description={`${itemConfirm.item.nome} — ${itemConfirm.qty} unidade${itemConfirm.qty !== 1 ? 's' : ''}`}
+                    confirmLabel={itemConfirm.mode === 'add' ? 'Adicionar' : 'Salvar'}
+                    onConfirm={() => {
+                        if (itemConfirm.mode === 'add') {
+                            setSelectedItens(prev => [...prev, { ...itemConfirm.item, quantidade: itemConfirm.qty }]);
+                        } else {
+                            setSelectedItens(prev => prev.map(i => i.id === itemConfirm.item.id ? { ...i, quantidade: itemConfirm.qty } : i));
+                        }
+                        setItemConfirm(null);
+                    }}
+                    onCancel={() => {
+                        setItemModal({ item: itemConfirm.item, qty: itemConfirm.qty, mode: itemConfirm.mode });
+                        setItemConfirm(null);
+                    }}
+                />
+            )}
 
             <style>{`
                 .ts-wrapper { width: 100%; }
