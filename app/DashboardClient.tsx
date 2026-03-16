@@ -36,7 +36,7 @@ async function fetchPedidos(currentUser: Usuario | null): Promise<any[]> {
     let query = supabase
         .from('pedidos')
         .select('id, numero_pedido, status, created_at, unidades(nome), usuario_id')
-        .order('id', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(200);
 
     if (scope === 'operador' && hasRealId(currentUser?.id)) {
