@@ -15,7 +15,9 @@ export default async function Home() {
         .order('data_pedido', { ascending: false })
         .limit(50);
 
-    if (currentUser?.role === 'solicitante') {
+    const scope = currentUser?.permissoes?.scope ?? 'operador';
+
+    if (scope === 'operador' && currentUser) {
         query = query.eq('usuario_id', currentUser.id);
     }
 
@@ -25,11 +27,9 @@ export default async function Home() {
         console.error('Error fetching pedidos:', error);
     }
 
-    // Fallback to mock data if empty or error
     let pedidosList = (pedidos && pedidos.length > 0) ? (pedidos as any[]) : mockPedidos;
 
-    // Apply solicitante filter on mock data too
-    if (currentUser?.role === 'solicitante') {
+    if (scope === 'operador' && currentUser) {
         pedidosList = pedidosList.filter((p: any) => p.usuario_id === currentUser.id);
     }
 

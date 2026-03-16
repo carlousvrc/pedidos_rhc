@@ -38,8 +38,9 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
                     .limit(50)
                     .then(({ data }) => {
                         if (data && data.length > 0) {
+                            const scope = currentUser?.permissoes?.scope ?? 'operador';
                             const filtered =
-                                currentUser?.role === 'solicitante'
+                                scope === 'operador' && currentUser
                                     ? data.filter((p: any) => p.usuario_id === currentUser.id)
                                     : data;
                             setPedidos(filtered);
@@ -54,9 +55,9 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
         };
     }, [currentUser]);
 
-    // Filter for solicitante
+    const scope = currentUser?.permissoes?.scope ?? 'operador';
     const visiblePedidos =
-        currentUser?.role === 'solicitante'
+        scope === 'operador' && currentUser
             ? pedidos.filter((p: any) => p.usuario_id === currentUser.id)
             : pedidos;
 
@@ -65,7 +66,7 @@ export default function DashboardClient({ currentUser, initialPedidos }: Dashboa
     const realizados = visiblePedidos.filter((p: any) => p.status?.toLowerCase() === 'realizado').length;
     const recebidos = visiblePedidos.filter((p: any) => p.status?.toLowerCase() === 'recebido').length;
 
-    const canCreateOrder = !currentUser || currentUser.role === 'solicitante' || currentUser.role === 'admin';
+    const canCreateOrder = !currentUser || currentUser?.permissoes?.modulos?.pedidos !== false;
 
     return (
         <div className="max-w-[1400px] mx-auto space-y-8">
