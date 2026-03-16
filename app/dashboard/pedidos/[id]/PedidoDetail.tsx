@@ -383,13 +383,6 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                             </div>
                         </div>
                     </div>
-                    <button
-                        onClick={handleExportCsv}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
-                    >
-                        <Download className="w-4 h-4" />
-                        Exportar CSV
-                    </button>
                 </div>
 
                 {/* Status Stepper */}
