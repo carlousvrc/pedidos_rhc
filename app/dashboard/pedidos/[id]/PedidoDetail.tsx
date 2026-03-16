@@ -1,11 +1,16 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { mockPedidos, mockPedidosItens, mockItens } from '@/lib/mockData';
 import type { Usuario } from '@/lib/auth';
-import { ChevronRight, Download, Save, Upload, RefreshCw, CheckCircle2, Pencil } from 'lucide-react';
+import {
+    ChevronRight, Download, Save, Upload, RefreshCw,
+    CheckCircle2, Pencil, FileText, X,
+} from 'lucide-react';
+
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 interface PedidoDetailProps {
     id: string;
@@ -18,12 +23,7 @@ interface PedidoItem {
     quantidade_atendida: number;
     quantidade_recebida: number;
     observacao: string;
-    itens: {
-        codigo: string;
-        referencia: string;
-        nome: string;
-        tipo?: string;
-    };
+    itens: { codigo: string; referencia: string; nome: string; tipo?: string };
 }
 
 interface Pedido {
@@ -36,13 +36,17 @@ interface Pedido {
     unidades?: { nome: string };
 }
 
+type ItemReception = 'recebido' | 'parcial' | 'nao_recebido' | null;
+
 const STEPS = ['Pendente', 'Realizado', 'Recebido'];
+
+// ── Small Components ───────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: string }) {
     const cls =
-        status === 'Pendente' ? 'bg-orange-100 text-orange-800' :
+        status === 'Pendente'  ? 'bg-orange-100 text-orange-800' :
         status === 'Realizado' ? 'bg-blue-100 text-[#001A72]' :
-        status === 'Recebido' ? 'bg-green-100 text-green-800' :
+        status === 'Recebido'  ? 'bg-green-100 text-green-800' :
         'bg-slate-100 text-slate-700';
     return (
         <span className={`px-2.5 py-0.5 inline-flex text-[11px] leading-5 font-semibold rounded-full ${cls}`}>
@@ -54,23 +58,22 @@ function StatusBadge({ status }: { status: string }) {
 function StatusStepper({ status }: { status: string }) {
     const currentIdx = STEPS.indexOf(status);
     return (
-        <div className="flex items-center gap-0 py-4">
+        <div className="flex items-center py-4">
             {STEPS.map((step, idx) => {
-                const done = idx < currentIdx;
+                const done   = idx < currentIdx;
                 const active = idx === currentIdx;
-                const stepColor = done || active
-                    ? step === 'Pendente' ? 'bg-orange-500 text-white border-orange-500'
-                        : step === 'Realizado' ? 'bg-[#001A72] text-white border-[#001A72]'
-                        : 'bg-green-500 text-white border-green-500'
+                const circleClass = done || active
+                    ? step === 'Pendente'  ? 'bg-orange-500 text-white border-orange-500'
+                    : step === 'Realizado' ? 'bg-[#001A72] text-white border-[#001A72]'
+                    : 'bg-green-500 text-white border-green-500'
                     : 'bg-white text-slate-400 border-slate-200';
-                const labelColor = active ? 'font-bold text-slate-800' : done ? 'text-slate-600' : 'text-slate-400';
                 return (
                     <div key={step} className="flex items-center flex-1">
                         <div className="flex flex-col items-center gap-1 flex-1">
-                            <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold ${stepColor}`}>
+                            <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold ${circleClass}`}>
                                 {done ? <CheckCircle2 className="w-4 h-4" /> : idx + 1}
                             </div>
-                            <span className={`text-xs ${labelColor}`}>{step}</span>
+                            <span className={`text-xs ${active ? 'font-bold text-slate-800' : done ? 'text-slate-600' : 'text-slate-400'}`}>{step}</span>
                         </div>
                         {idx < STEPS.length - 1 && (
                             <div className={`flex-1 h-0.5 mx-2 ${idx < currentIdx ? 'bg-[#001A72]' : 'bg-slate-200'}`} />
@@ -82,180 +85,191 @@ function StatusStepper({ status }: { status: string }) {
     );
 }
 
-export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
-    const [pedido, setPedido] = useState<Pedido | null>(null);
-    const [items, setItems] = useState<PedidoItem[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [updating, setUpdating] = useState(false);
-    const [saving, setSaving] = useState(false);
-    const [processingPdf, setProcessingPdf] = useState(false);
-    const [pdfFiles, setPdfFiles] = useState<File[]>([]);
-    const [pdfError, setPdfError] = useState('');
-    const [localEdits, setLocalEdits] = useState<Record<string, { quantidade_recebida: number; observacao: string }>>({});
-    const fileRef = useRef<HTMLInputElement>(null);
+// ── Main Component ─────────────────────────────────────────────────────────────
 
-    const role = currentUser?.role ?? 'solicitante';
+export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
+    const [pedido,        setPedido]        = useState<Pedido | null>(null);
+    const [items,         setItems]         = useState<PedidoItem[]>([]);
+    const [loading,       setLoading]       = useState(true);
+    const [updating,      setUpdating]      = useState(false);
+    const [saving,        setSaving]        = useState(false);
+
+    // PDF upload + preview (before confirming)
+    const [processingPdf, setProcessingPdf] = useState(false);
+    const [pdfFiles,      setPdfFiles]      = useState<File[]>([]);
+    const [pdfError,      setPdfError]      = useState('');
+    const [previewBionexo, setPreviewBionexo] = useState<Array<{ codigo: string; quantidade: number }> | null>(null);
+
+    // Solicitante item-level reception
+    const [itemReception, setItemReception] = useState<Record<string, ItemReception>>({});
+    const [itemQtyEdit,   setItemQtyEdit]   = useState<Record<string, number>>({});
+
+    const fileRef = useRef<HTMLInputElement>(null);
+    const role    = currentUser?.role ?? 'solicitante';
+
+    // ── Data loading ─────────────────────────────────────────────────────────
 
     async function loadData() {
-        // Try Supabase
-        const { data: supabasePedido, error: pedidoError } = await supabase
+        const { data: supabasePedido, error } = await supabase
             .from('pedidos')
             .select('*, unidades(nome)')
             .eq('id', id)
             .single();
 
-        if (supabasePedido && !pedidoError) {
+        if (supabasePedido && !error) {
             setPedido(supabasePedido as Pedido);
-
             const { data: supabaseItems } = await supabase
                 .from('pedidos_itens')
                 .select('id, quantidade, quantidade_atendida, quantidade_recebida, observacao, itens(codigo, referencia, nome, tipo)')
                 .eq('pedido_id', id);
-
             setItems((supabaseItems as unknown as PedidoItem[]) || []);
             setLoading(false);
             return;
         }
 
-        // Fallback to mock
+        // Fallback mock
         const mockP = mockPedidos.find(p => p.id === id);
         if (mockP) {
             setPedido(mockP as unknown as Pedido);
             const mockI = mockPedidosItens.filter(pi => pi.pedido_id === id);
-            const mapped: PedidoItem[] = mockI.map(pi => {
+            setItems(mockI.map(pi => {
                 const itemRef = mockItens.find(i => i.id === pi.item_id);
                 return {
-                    id: pi.id,
-                    quantidade: pi.quantidade,
+                    id: pi.id, quantidade: pi.quantidade,
                     quantidade_atendida: pi.quantidade_atendida,
                     quantidade_recebida: pi.quantidade_recebida,
                     observacao: pi.observacao,
-                    itens: {
-                        codigo: itemRef?.codigo || '',
-                        referencia: itemRef?.referencia || '',
-                        nome: itemRef?.nome || '',
-                        tipo: itemRef?.tipo || '',
-                    }
+                    itens: { codigo: itemRef?.codigo || '', referencia: itemRef?.referencia || '', nome: itemRef?.nome || '', tipo: itemRef?.tipo },
                 };
-            });
-            setItems(mapped);
+            }));
         }
         setLoading(false);
     }
 
     useEffect(() => {
         loadData();
-
-        const pedidoChannel = supabase
-            .channel(`pedido-${id}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos', filter: `id=eq.${id}` }, () => {
-                setUpdating(true);
-                loadData().then(() => setTimeout(() => setUpdating(false), 800));
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos_itens', filter: `pedido_id=eq.${id}` }, () => {
-                setUpdating(true);
-                loadData().then(() => setTimeout(() => setUpdating(false), 800));
-            })
+        const ch = supabase.channel(`pedido-${id}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos',       filter: `id=eq.${id}` },           () => { setUpdating(true); loadData().then(() => setTimeout(() => setUpdating(false), 800)); })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos_itens', filter: `pedido_id=eq.${id}` }, () => { setUpdating(true); loadData().then(() => setTimeout(() => setUpdating(false), 800)); })
             .subscribe();
-
-        return () => {
-            supabase.removeChannel(pedidoChannel);
-        };
+        return () => { supabase.removeChannel(ch); };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]);
 
-    // Init local edits when items load
+    // Init reception state from DB values when items load
     useEffect(() => {
-        if (items.length > 0) {
-            const edits: Record<string, { quantidade_recebida: number; observacao: string }> = {};
-            items.forEach(item => {
-                if (!localEdits[item.id]) {
-                    edits[item.id] = {
-                        quantidade_recebida: item.quantidade_recebida,
-                        observacao: item.observacao,
-                    };
-                }
-            });
-            if (Object.keys(edits).length > 0) {
-                setLocalEdits(prev => ({ ...edits, ...prev }));
+        if (items.length === 0) return;
+        setItemReception(prev => {
+            const next = { ...prev };
+            for (const item of items) {
+                if (next[item.id] !== undefined) continue;
+                if (item.quantidade_recebida >= item.quantidade_atendida && item.quantidade_atendida > 0)
+                    next[item.id] = 'recebido';
+                else if (item.quantidade_recebida > 0)
+                    next[item.id] = 'parcial';
+                else
+                    next[item.id] = null;
             }
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+            return next;
+        });
+        setItemQtyEdit(prev => {
+            const next = { ...prev };
+            for (const item of items) {
+                if (next[item.id] === undefined) next[item.id] = item.quantidade_recebida;
+            }
+            return next;
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [items]);
 
-    async function handleProcessBionexo() {
-        if (pdfFiles.length === 0) {
-            setPdfError('Selecione pelo menos um arquivo PDF.');
-            return;
-        }
+    // ── PDF auto-processing ───────────────────────────────────────────────────
+
+    async function processPdfFiles(files: File[]) {
+        if (files.length === 0) return;
         setProcessingPdf(true);
         setPdfError('');
-
+        setPreviewBionexo(null);
         try {
-            // Process all files and merge results (sum quantities per codigo)
             const mergedMap: Record<string, number> = {};
-
-            for (const file of pdfFiles) {
+            for (const file of files) {
                 const formData = new FormData();
                 formData.append('file', file);
-
-                const res = await fetch('/api/bionexo/convert', { method: 'POST', body: formData });
+                const res  = await fetch('/api/bionexo/convert', { method: 'POST', body: formData });
                 const json = await res.json();
-
-                if (!res.ok) {
-                    throw new Error(`${file.name}: ${json.error || 'Erro ao processar PDF.'}`);
-                }
-
-                const fileItens: Array<{ codigo: string; quantidade: number }> = json.itens || [];
-                for (const it of fileItens) {
+                if (!res.ok) throw new Error(`${file.name}: ${json.error || 'Erro ao processar PDF.'}`);
+                for (const it of (json.itens as Array<{ codigo: string; quantidade: number }>) ?? []) {
                     mergedMap[it.codigo] = (mergedMap[it.codigo] || 0) + it.quantidade;
                 }
             }
-
-            const bionexoItens = Object.entries(mergedMap).map(([codigo, quantidade]) => ({ codigo, quantidade }));
-
-            // Match by codigo and update supabase
-            const updates = items.map(item => {
-                const match = bionexoItens.find(b => b.codigo === item.itens.codigo);
-                return {
-                    id: item.id,
-                    quantidade_atendida: match ? match.quantidade : 0,
-                };
-            });
-
-            for (const upd of updates) {
-                await supabase
-                    .from('pedidos_itens')
-                    .update({ quantidade_atendida: upd.quantidade_atendida })
-                    .eq('id', upd.id);
-            }
-
-            // Update pedido status to Realizado
-            await supabase.from('pedidos').update({ status: 'Realizado' }).eq('id', id);
-
-            await loadData();
+            setPreviewBionexo(Object.entries(mergedMap).map(([codigo, quantidade]) => ({ codigo, quantidade })));
         } catch (err: any) {
-            setPdfError(err.message || 'Erro ao processar PDF Bionexo.');
+            setPdfError(err.message || 'Erro ao processar PDF.');
         } finally {
             setProcessingPdf(false);
         }
     }
+
+    function handleFilesChange(files: File[]) {
+        setPdfFiles(files);
+        setPdfError('');
+        setPreviewBionexo(null);
+        processPdfFiles(files);
+    }
+
+    // ── Preview comparison (before confirming) ────────────────────────────────
+
+    const previewMap = useMemo<Record<string, number>>(() => {
+        if (!previewBionexo) return {};
+        const m: Record<string, number> = {};
+        for (const it of previewBionexo) m[it.codigo] = (m[it.codigo] || 0) + it.quantidade;
+        return m;
+    }, [previewBionexo]);
+
+    const previewComparison = useMemo(() => {
+        if (!previewBionexo || items.length === 0) return null;
+        return items.map(item => ({
+            ...item,
+            preview_atendida: previewMap[item.itens.codigo] ?? 0,
+        }));
+    }, [previewBionexo, previewMap, items]);
+
+    // ── Confirmar Pedido (comprador saves atendidas + changes status) ─────────
+
+    async function handleConfirmarPedido() {
+        if (!previewBionexo) return;
+        setProcessingPdf(true);
+        try {
+            for (const item of items) {
+                const quantidade_atendida = previewMap[item.itens.codigo] ?? 0;
+                await supabase.from('pedidos_itens').update({ quantidade_atendida }).eq('id', item.id);
+            }
+            await supabase.from('pedidos').update({ status: 'Realizado' }).eq('id', id);
+            await loadData();
+            setPdfFiles([]);
+            setPreviewBionexo(null);
+        } catch (err: any) {
+            setPdfError(err.message || 'Erro ao confirmar pedido.');
+        } finally {
+            setProcessingPdf(false);
+        }
+    }
+
+    // ── Confirmar Recebimento (solicitante saves reception per item) ──────────
 
     async function handleSaveRecebimento() {
         if (!pedido) return;
         setSaving(true);
         try {
             for (const item of items) {
-                const edit = localEdits[item.id];
-                if (edit) {
-                    await supabase
-                        .from('pedidos_itens')
-                        .update({
-                            quantidade_recebida: edit.quantidade_recebida,
-                            observacao: edit.observacao,
-                        })
-                        .eq('id', item.id);
-                }
+                const reception = itemReception[item.id];
+                const qty = reception === 'recebido'
+                    ? item.quantidade_atendida
+                    : reception === 'parcial'
+                    ? (itemQtyEdit[item.id] ?? 0)
+                    : 0;
+                await supabase.from('pedidos_itens')
+                    .update({ quantidade_recebida: qty })
+                    .eq('id', item.id);
             }
             await supabase.from('pedidos').update({ status: 'Recebido' }).eq('id', id);
             await loadData();
@@ -271,48 +285,28 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
         await loadData();
     }
 
+    // ── CSV export ────────────────────────────────────────────────────────────
+
     function handleExportCsv() {
         if (!pedido) return;
-        const lines = items.map(item => `${item.itens.codigo};${item.quantidade}`);
-        const csv = lines.join('\n');
+        const csv = items.map(i => `${i.itens.codigo};${i.quantidade}`).join('\n');
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Pedido_${pedido.numero_pedido}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href = url; a.download = `Pedido_${pedido.numero_pedido}.csv`;
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a); URL.revokeObjectURL(url);
     }
 
-    function getSituacao(atendida: number, pedida: number): 'atendido' | 'parcial' | 'nao_atendido' {
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    function getSituacao(atendida: number, pedida: number) {
         if (atendida >= pedida) return 'atendido';
-        if (atendida > 0) return 'parcial';
+        if (atendida > 0)       return 'parcial';
         return 'nao_atendido';
     }
 
-    function getDiffColor(diff: number) {
-        if (diff === 0) return 'text-slate-500';
-        if (diff > 0) return 'text-green-700';
-        return 'text-red-600 font-semibold';
-    }
-
-    function getRowHighlight(item: PedidoItem, status: string) {
-        if (status === 'Realizado') {
-            const s = getSituacao(item.quantidade_atendida, item.quantidade);
-            if (s === 'atendido') return 'bg-green-50/50';
-            if (s === 'parcial') return 'bg-yellow-50/60';
-            return 'bg-red-50/50';
-        }
-        if (status === 'Recebido') {
-            const recebida = localEdits[item.id]?.quantidade_recebida ?? item.quantidade_recebida;
-            if (recebida >= item.quantidade) return 'bg-green-50/50';
-            if (recebida > 0) return 'bg-yellow-50/60';
-            return 'bg-red-50/50';
-        }
-        return '';
-    }
+    // ── Render ────────────────────────────────────────────────────────────────
 
     if (loading) {
         return (
@@ -321,19 +315,16 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
             </div>
         );
     }
-
     if (!pedido) {
-        return (
-            <div className="text-red-500 p-8 text-center font-bold bg-white rounded-xl shadow-sm border border-red-100">
-                Pedido #{id} não encontrado.
-            </div>
-        );
+        return <div className="text-red-500 p-8 text-center font-bold bg-white rounded-xl border border-red-100">Pedido #{id} não encontrado.</div>;
     }
 
-    const canComprador = role === 'comprador' || role === 'admin';
+    const canComprador  = role === 'comprador' || role === 'admin';
     const canSolicitante = role === 'solicitante' || role === 'admin';
-    const canEdit = currentUser?.permissoes?.modulos?.usuarios === true;
-    const status = pedido.status;
+    const canEdit       = currentUser?.permissoes?.modulos?.usuarios === true;
+    const status        = pedido.status;
+
+    const allReceptionSet = items.length > 0 && items.every(i => itemReception[i.id] !== null && itemReception[i.id] !== undefined);
 
     return (
         <div className="space-y-6 max-w-[1400px]">
@@ -349,18 +340,15 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
 
             {/* Header */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div className="flex flex-col md:flex-row justify-between items-start gap-4">
                     <div>
                         <div className="flex items-center gap-3 mb-3">
                             <h1 className="text-2xl font-bold text-slate-900">Pedido #{pedido.numero_pedido}</h1>
                             <StatusBadge status={status} />
                             {canEdit && (
-                                <Link
-                                    href={`/dashboard/pedidos/${pedido.id}/editar`}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
-                                >
-                                    <Pencil className="w-3.5 h-3.5" />
-                                    Editar
+                                <Link href={`/dashboard/pedidos/${pedido.id}/editar`}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors">
+                                    <Pencil className="w-3.5 h-3.5" /> Editar
                                 </Link>
                             )}
                             {updating && (
@@ -383,33 +371,27 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                         </div>
                     </div>
                 </div>
-
-                {/* Status Stepper */}
                 <StatusStepper status={status} />
             </div>
 
-            {/* Comprador Section */}
+            {/* ── Área do Comprador ────────────────────────────────────────── */}
             {canComprador && (
                 <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
                     <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                         <h2 className="text-lg font-bold text-slate-800">Área do Comprador</h2>
-                        {status === 'Pendente' && (
-                            <span className="text-xs bg-orange-100 text-orange-700 font-semibold px-2.5 py-1 rounded-full">
-                                Aguardando processamento
-                            </span>
-                        )}
                         {status === 'Realizado' && (
                             <span className="flex items-center gap-1.5 text-xs bg-green-100 text-green-700 font-semibold px-2.5 py-1 rounded-full">
-                                <CheckCircle2 className="w-3.5 h-3.5" /> PDF processado
+                                <CheckCircle2 className="w-3.5 h-3.5" /> PDF confirmado
                             </span>
                         )}
                     </div>
 
                     {status === 'Pendente' && (
-                        <div className="p-6">
+                        <div className="p-6 space-y-6">
+                            {/* Steps row */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-                                {/* Passo 1 */}
+                                {/* Passo 1 — CSV */}
                                 <div className="flex flex-col gap-4 p-5 rounded-xl border-2 border-[#001A72]/20 bg-blue-50/40">
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded-full bg-[#001A72] text-white flex items-center justify-center text-sm font-bold shrink-0">1</div>
@@ -418,77 +400,142 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                             <p className="text-xs text-slate-500 mt-0.5">Envie para a plataforma de cotação</p>
                                         </div>
                                     </div>
-                                    <button
-                                        onClick={handleExportCsv}
-                                        className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#001A72] text-white text-sm font-medium rounded-lg hover:bg-[#001250] transition-colors"
-                                    >
-                                        <Download className="w-4 h-4" />
-                                        Baixar CSV
+                                    <button onClick={handleExportCsv}
+                                        className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#001A72] text-white text-sm font-medium rounded-lg hover:bg-[#001250] transition-colors">
+                                        <Download className="w-4 h-4" /> Baixar CSV
                                     </button>
                                 </div>
 
-                                {/* Passo 2 */}
+                                {/* Passo 2 — PDF upload */}
                                 <div className="flex flex-col gap-4 p-5 rounded-xl border-2 border-slate-200 bg-slate-50">
                                     <div className="flex items-center gap-3">
                                         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${pdfFiles.length > 0 ? 'bg-[#001A72] text-white' : 'bg-slate-300 text-white'}`}>2</div>
                                         <div>
                                             <p className="font-semibold text-slate-800 text-sm">Anexar PDF de Resposta</p>
-                                            <p className="text-xs text-slate-500 mt-0.5">Após receber o PDF, anexe e processe</p>
+                                            <p className="text-xs text-slate-500 mt-0.5">O PDF será processado automaticamente</p>
                                         </div>
                                     </div>
+
+                                    {/* Drop zone */}
                                     <div
                                         className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${pdfFiles.length > 0 ? 'border-[#001A72] bg-blue-50' : 'border-slate-200 hover:border-[#001A72] hover:bg-slate-100'}`}
-                                        onClick={() => fileRef.current?.click()}
+                                        onClick={() => !processingPdf && fileRef.current?.click()}
                                     >
-                                        <Upload className={`w-5 h-5 mx-auto mb-1.5 ${pdfFiles.length > 0 ? 'text-[#001A72]' : 'text-slate-300'}`} />
-                                        {pdfFiles.length > 0 ? (
-                                            <div className="space-y-0.5">
+                                        {processingPdf ? (
+                                            <div className="flex flex-col items-center gap-2">
+                                                <RefreshCw className="w-5 h-5 text-[#001A72] animate-spin" />
+                                                <p className="text-xs text-slate-500">Processando PDF...</p>
+                                            </div>
+                                        ) : pdfFiles.length > 0 ? (
+                                            <div className="space-y-1">
                                                 {pdfFiles.map((f, i) => (
-                                                    <p key={i} className="text-xs font-medium text-[#001A72] truncate">{f.name}</p>
+                                                    <div key={i} className="flex items-center justify-center gap-1.5">
+                                                        <FileText className="w-3.5 h-3.5 text-[#001A72] shrink-0" />
+                                                        <p className="text-xs font-medium text-[#001A72] truncate">{f.name}</p>
+                                                    </div>
                                                 ))}
-                                                <p className="text-[11px] text-slate-400 mt-1">{pdfFiles.length} arquivo(s)</p>
+                                                <p className="text-[11px] text-slate-400 mt-1">{pdfFiles.length} arquivo(s) · clique para trocar</p>
                                             </div>
                                         ) : (
-                                            <p className="text-xs text-slate-400">Clique para selecionar PDFs</p>
+                                            <div>
+                                                <Upload className="w-5 h-5 mx-auto mb-1.5 text-slate-300" />
+                                                <p className="text-xs text-slate-400">Clique para selecionar PDFs</p>
+                                            </div>
                                         )}
-                                        <input
-                                            ref={fileRef}
-                                            type="file"
-                                            accept=".pdf"
-                                            multiple
-                                            className="hidden"
-                                            onChange={e => { setPdfFiles(Array.from(e.target.files || [])); setPdfError(''); }}
-                                        />
+                                        <input ref={fileRef} type="file" accept=".pdf" multiple className="hidden"
+                                            onChange={e => handleFilesChange(Array.from(e.target.files || []))} />
                                     </div>
                                     {pdfError && <p className="text-xs text-red-600">{pdfError}</p>}
-                                    <button
-                                        onClick={handleProcessBionexo}
-                                        disabled={processingPdf || pdfFiles.length === 0}
-                                        className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-700 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                                    >
-                                        {processingPdf ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                                        {processingPdf ? 'Processando...' : 'Processar PDF'}
-                                    </button>
                                 </div>
                             </div>
+
+                            {/* Preview da comparação */}
+                            {previewComparison && (
+                                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                                    <div className="px-5 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                                        <div>
+                                            <p className="text-sm font-bold text-slate-800">Prévia da Comparação</p>
+                                            <p className="text-xs text-slate-500 mt-0.5">Revise antes de confirmar</p>
+                                        </div>
+                                        {/* Summary chips */}
+                                        <div className="flex gap-2 flex-wrap justify-end">
+                                            {(() => {
+                                                const atend   = previewComparison.filter(i => getSituacao(i.preview_atendida, i.quantidade) === 'atendido').length;
+                                                const parcial = previewComparison.filter(i => getSituacao(i.preview_atendida, i.quantidade) === 'parcial').length;
+                                                const nao     = previewComparison.filter(i => getSituacao(i.preview_atendida, i.quantidade) === 'nao_atendido').length;
+                                                return (
+                                                    <>
+                                                        <span className="px-2 py-0.5 text-[11px] font-semibold bg-green-100 text-green-700 rounded-full">{atend} atendido(s)</span>
+                                                        {parcial > 0 && <span className="px-2 py-0.5 text-[11px] font-semibold bg-yellow-100 text-yellow-700 rounded-full">{parcial} parcial(is)</span>}
+                                                        {nao     > 0 && <span className="px-2 py-0.5 text-[11px] font-semibold bg-red-100 text-red-600 rounded-full">{nao} não atendido(s)</span>}
+                                                    </>
+                                                );
+                                            })()}
+                                        </div>
+                                    </div>
+                                    <div className="overflow-x-auto max-h-64">
+                                        <table className="min-w-full text-sm divide-y divide-slate-100">
+                                            <thead className="bg-slate-50 sticky top-0">
+                                                <tr>
+                                                    <th className="px-4 py-2 text-left text-xs font-bold text-slate-500 uppercase">Produto</th>
+                                                    <th className="px-4 py-2 text-left text-xs font-bold text-slate-500 uppercase">Código</th>
+                                                    <th className="px-4 py-2 text-right text-xs font-bold text-slate-500 uppercase">Pedido</th>
+                                                    <th className="px-4 py-2 text-right text-xs font-bold text-slate-500 uppercase">Atendido</th>
+                                                    <th className="px-4 py-2 text-right text-xs font-bold text-slate-500 uppercase">Dif.</th>
+                                                    <th className="px-4 py-2 text-left text-xs font-bold text-slate-500 uppercase">Situação</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="bg-white divide-y divide-slate-50">
+                                                {previewComparison.map(item => {
+                                                    const sit  = getSituacao(item.preview_atendida, item.quantidade);
+                                                    const diff = item.preview_atendida - item.quantidade;
+                                                    return (
+                                                        <tr key={item.id} className={sit === 'atendido' ? 'bg-green-50/40' : sit === 'parcial' ? 'bg-yellow-50/50' : 'bg-red-50/40'}>
+                                                            <td className="px-4 py-2 text-slate-800 font-medium max-w-[200px] truncate">{item.itens.nome}</td>
+                                                            <td className="px-4 py-2 text-slate-500 font-mono text-xs">{item.itens.codigo}</td>
+                                                            <td className="px-4 py-2 text-right font-semibold text-slate-800">{item.quantidade}</td>
+                                                            <td className={`px-4 py-2 text-right font-semibold ${sit === 'atendido' ? 'text-green-700' : sit === 'parcial' ? 'text-yellow-700' : 'text-red-600'}`}>{item.preview_atendida}</td>
+                                                            <td className={`px-4 py-2 text-right font-semibold text-xs ${diff < 0 ? 'text-red-600' : diff > 0 ? 'text-green-700' : 'text-slate-400'}`}>{diff > 0 ? `+${diff}` : diff === 0 ? '—' : diff}</td>
+                                                            <td className="px-4 py-2">
+                                                                {sit === 'atendido'    && <span className="text-[11px] font-semibold text-green-700">✓ Atendido</span>}
+                                                                {sit === 'parcial'     && <span className="text-[11px] font-semibold text-yellow-700">~ Parcial</span>}
+                                                                {sit === 'nao_atendido'&& <span className="text-[11px] font-semibold text-red-600">✕ Não atendido</span>}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    {/* Confirmar Pedido */}
+                                    <div className="px-5 py-4 border-t border-slate-200 bg-slate-50 flex justify-end">
+                                        <button
+                                            onClick={handleConfirmarPedido}
+                                            disabled={processingPdf}
+                                            className="flex items-center gap-2 px-5 py-2.5 bg-[#001A72] text-white text-sm font-medium rounded-lg hover:bg-[#001250] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {processingPdf ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                                            Confirmar Pedido
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
 
                     {status === 'Realizado' && (
                         <div className="px-6 py-4 text-sm text-slate-600">
-                            PDF processado com sucesso. Aguardando confirmação de recebimento pelo solicitante.
+                            PDF processado. Aguardando confirmação de recebimento pelo solicitante.
                         </div>
                     )}
 
-                    {/* Status change controls */}
+                    {/* Manual status change */}
                     <div className="px-6 py-4 border-t border-slate-100 flex flex-wrap gap-2 items-center">
                         <span className="text-xs text-slate-400">Alterar status manualmente:</span>
                         {STEPS.filter(s => s !== status).map(s => (
-                            <button
-                                key={s}
-                                onClick={() => handleChangeStatus(s)}
-                                className="text-xs px-3 py-1.5 border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 transition-colors"
-                            >
+                            <button key={s} onClick={() => handleChangeStatus(s)}
+                                className="text-xs px-3 py-1.5 border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 transition-colors">
                                 Marcar como {s}
                             </button>
                         ))}
@@ -496,7 +543,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                 </div>
             )}
 
-            {/* Items Table */}
+            {/* ── Tabela de Itens ──────────────────────────────────────────── */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
                     <div>
@@ -505,14 +552,14 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                     </div>
                 </div>
 
-                {/* Comparison summary — shown after PDF is processed */}
+                {/* Comparison summary — shown after PDF is confirmed */}
                 {status !== 'Pendente' && items.length > 0 && (() => {
-                    const atendidos  = items.filter(i => getSituacao(i.quantidade_atendida, i.quantidade) === 'atendido').length;
-                    const parciais   = items.filter(i => getSituacao(i.quantidade_atendida, i.quantidade) === 'parcial').length;
-                    const naoAtend   = items.filter(i => getSituacao(i.quantidade_atendida, i.quantidade) === 'nao_atendido').length;
-                    const totalPed   = items.reduce((s, i) => s + i.quantidade, 0);
-                    const totalAtend = items.reduce((s, i) => s + i.quantidade_atendida, 0);
-                    const diff       = totalAtend - totalPed;
+                    const atendidos = items.filter(i => getSituacao(i.quantidade_atendida, i.quantidade) === 'atendido').length;
+                    const parciais  = items.filter(i => getSituacao(i.quantidade_atendida, i.quantidade) === 'parcial').length;
+                    const naoAtend  = items.filter(i => getSituacao(i.quantidade_atendida, i.quantidade) === 'nao_atendido').length;
+                    const totalPed  = items.reduce((s, i) => s + i.quantidade, 0);
+                    const totalAt   = items.reduce((s, i) => s + i.quantidade_atendida, 0);
+                    const diff      = totalAt - totalPed;
                     return (
                         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/60 space-y-3">
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -535,140 +582,132 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                             </div>
                             <div className="flex items-center gap-4 text-xs text-slate-500">
                                 <span>Qtd solicitada: <strong className="text-slate-700">{totalPed}</strong></span>
-                                <span>Qtd atendida: <strong className="text-slate-700">{totalAtend}</strong></span>
-                                <span>Diferença total:
-                                    <strong className={diff < 0 ? 'text-red-600 ml-1' : diff > 0 ? 'text-green-700 ml-1' : 'text-slate-500 ml-1'}>
-                                        {diff > 0 ? `+${diff}` : diff}
-                                    </strong>
-                                </span>
+                                <span>Qtd atendida: <strong className="text-slate-700">{totalAt}</strong></span>
+                                <span>Diferença: <strong className={diff < 0 ? 'text-red-600' : diff > 0 ? 'text-green-700' : 'text-slate-500'}>{diff > 0 ? `+${diff}` : diff}</strong></span>
                             </div>
-                            {(parciais > 0 || naoAtend > 0) && canSolicitante && status === 'Realizado' && (
-                                <p className="text-xs text-[#001A72] font-medium bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
-                                    Verifique os itens marcados em amarelo e vermelho abaixo, preencha as quantidades recebidas e confirme o recebimento.
-                                </p>
-                            )}
                         </div>
                     );
                 })()}
 
+                {/* Item table */}
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-slate-100 text-sm">
                         <thead className="bg-slate-50">
                             <tr>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider w-8">#</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase w-8">#</th>
+                                {status !== 'Pendente' && <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Situação</th>}
+                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Produto</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Código</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Tipo</th>
+                                <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Qtd Pedida</th>
                                 {status !== 'Pendente' && (
-                                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Situação</th>
+                                    <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Qtd Atendida</th>
                                 )}
-                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Produto</th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Código</th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Tipo</th>
-                                <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Qtd Pedida</th>
-                                {status !== 'Pendente' && (<>
-                                    <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Qtd Atendida</th>
-                                    <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Diferença</th>
-                                </>)}
-                                <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Qtd Recebida</th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Observação</th>
+                                {status === 'Realizado' && canSolicitante && (
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Recebimento</th>
+                                )}
+                                {status === 'Recebido' && (
+                                    <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Qtd Recebida</th>
+                                )}
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-100">
                             {items.length === 0 ? (
                                 <tr>
-                                    <td colSpan={status !== 'Pendente' ? 10 : 7} className="px-6 py-10 text-center text-slate-500">
-                                        Nenhum item encontrado para este pedido.
-                                    </td>
+                                    <td colSpan={8} className="px-6 py-10 text-center text-slate-500">Nenhum item encontrado.</td>
                                 </tr>
-                            ) : (
-                                items.map((item, idx) => {
-                                    const diff = item.quantidade_atendida - item.quantidade;
-                                    const situacao = getSituacao(item.quantidade_atendida, item.quantidade);
-                                    const editData = localEdits[item.id] ?? { quantidade_recebida: item.quantidade_recebida, observacao: item.observacao };
-                                    const canEdit = canSolicitante && status === 'Realizado';
-                                    return (
-                                        <tr key={item.id} className={`transition-colors hover:brightness-95 ${getRowHighlight(item, status)}`}>
-                                            <td className="px-4 py-3.5 text-xs text-slate-400 font-mono">{idx + 1}</td>
-                                            {status !== 'Pendente' && (
-                                                <td className="px-4 py-3.5">
-                                                    {situacao === 'atendido' && (
-                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-green-100 text-green-700">
-                                                            <CheckCircle2 className="w-3 h-3" /> Atendido
-                                                        </span>
-                                                    )}
-                                                    {situacao === 'parcial' && (
-                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-yellow-100 text-yellow-700">
-                                                            <span className="w-3 h-3 text-center leading-none">~</span> Parcial
-                                                        </span>
-                                                    )}
-                                                    {situacao === 'nao_atendido' && (
-                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-red-100 text-red-700">
-                                                            <span className="w-3 h-3 text-center leading-none font-bold">✕</span> Não atendido
-                                                        </span>
-                                                    )}
-                                                </td>
-                                            )}
-                                            <td className="px-4 py-3.5 text-slate-800 font-medium max-w-xs truncate">{item.itens.nome}</td>
-                                            <td className="px-4 py-3.5 text-slate-500 font-mono">{item.itens.codigo}</td>
-                                            <td className="px-4 py-3.5 text-slate-500">{item.itens.tipo || '—'}</td>
-                                            <td className="px-4 py-3.5 text-right text-slate-900 font-semibold">{item.quantidade}</td>
-                                            {status !== 'Pendente' && (<>
-                                                <td className="px-4 py-3.5 text-right font-semibold">
-                                                    <span className={
-                                                        situacao === 'atendido' ? 'text-green-700' :
-                                                        situacao === 'parcial'  ? 'text-yellow-700' :
-                                                        'text-red-600'
-                                                    }>{item.quantidade_atendida}</span>
-                                                </td>
-                                                <td className={`px-4 py-3.5 text-right font-semibold ${getDiffColor(diff)}`}>
-                                                    {diff > 0 ? `+${diff}` : diff === 0 ? '—' : diff}
-                                                </td>
-                                            </>)}
-                                            <td className="px-4 py-3.5 text-right">
-                                                {canEdit ? (
-                                                    <input
-                                                        type="number"
-                                                        min={0}
-                                                        value={editData.quantidade_recebida}
-                                                        onChange={e => setLocalEdits(prev => ({
-                                                            ...prev,
-                                                            [item.id]: { ...prev[item.id], quantidade_recebida: parseInt(e.target.value) || 0 }
-                                                        }))}
-                                                        className="w-20 text-right border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#001A72]"
-                                                    />
-                                                ) : (
-                                                    <span className="text-slate-600">{item.quantidade_recebida}</span>
-                                                )}
-                                            </td>
+                            ) : items.map((item, idx) => {
+                                const situacao  = getSituacao(item.quantidade_atendida, item.quantidade);
+                                const reception = itemReception[item.id];
+                                const rowBg = status === 'Realizado'
+                                    ? situacao === 'atendido' ? 'bg-green-50/50' : situacao === 'parcial' ? 'bg-yellow-50/60' : 'bg-red-50/50'
+                                    : status === 'Recebido'
+                                    ? reception === 'recebido' ? 'bg-green-50/50' : reception === 'parcial' ? 'bg-yellow-50/60' : reception === 'nao_recebido' ? 'bg-red-50/50' : ''
+                                    : '';
+
+                                return (
+                                    <tr key={item.id} className={`transition-colors hover:brightness-95 ${rowBg}`}>
+                                        <td className="px-4 py-3.5 text-xs text-slate-400 font-mono">{idx + 1}</td>
+
+                                        {/* Situação (comprador atendimento) */}
+                                        {status !== 'Pendente' && (
                                             <td className="px-4 py-3.5">
-                                                {canEdit ? (
-                                                    <input
-                                                        type="text"
-                                                        value={editData.observacao}
-                                                        onChange={e => setLocalEdits(prev => ({
-                                                            ...prev,
-                                                            [item.id]: { ...prev[item.id], observacao: e.target.value }
-                                                        }))}
-                                                        placeholder="Observação..."
-                                                        className="w-full min-w-[160px] border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#001A72]"
-                                                    />
-                                                ) : (
-                                                    <span className="text-slate-500 text-xs">{item.observacao || '—'}</span>
-                                                )}
+                                                {situacao === 'atendido'     && <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-green-100 text-green-700"><CheckCircle2 className="w-3 h-3" /> Atendido</span>}
+                                                {situacao === 'parcial'      && <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-yellow-100 text-yellow-700">~ Parcial</span>}
+                                                {situacao === 'nao_atendido' && <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-red-100 text-red-600">✕ Não atendido</span>}
                                             </td>
-                                        </tr>
-                                    );
-                                })
-                            )}
+                                        )}
+
+                                        <td className="px-4 py-3.5 text-slate-800 font-medium max-w-xs truncate">{item.itens.nome}</td>
+                                        <td className="px-4 py-3.5 text-slate-500 font-mono">{item.itens.codigo}</td>
+                                        <td className="px-4 py-3.5 text-slate-500">{item.itens.tipo || '—'}</td>
+                                        <td className="px-4 py-3.5 text-right font-semibold text-slate-900">{item.quantidade}</td>
+
+                                        {status !== 'Pendente' && (
+                                            <td className={`px-4 py-3.5 text-right font-semibold ${situacao === 'atendido' ? 'text-green-700' : situacao === 'parcial' ? 'text-yellow-700' : 'text-red-600'}`}>
+                                                {item.quantidade_atendida}
+                                            </td>
+                                        )}
+
+                                        {/* Recebimento per item — solicitante, status Realizado */}
+                                        {status === 'Realizado' && canSolicitante && (
+                                            <td className="px-4 py-3.5">
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                    <button
+                                                        onClick={() => setItemReception(p => ({ ...p, [item.id]: 'recebido' }))}
+                                                        className={`px-2.5 py-1 text-xs font-semibold rounded-md border transition-colors ${reception === 'recebido' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-green-700 border-green-200 hover:bg-green-50'}`}
+                                                    >
+                                                        ✓ Recebido
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setItemReception(p => ({ ...p, [item.id]: 'parcial' }))}
+                                                        className={`px-2.5 py-1 text-xs font-semibold rounded-md border transition-colors ${reception === 'parcial' ? 'bg-yellow-500 text-white border-yellow-500' : 'bg-white text-yellow-700 border-yellow-200 hover:bg-yellow-50'}`}
+                                                    >
+                                                        ~ Parcial
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setItemReception(p => ({ ...p, [item.id]: 'nao_recebido' }))}
+                                                        className={`px-2.5 py-1 text-xs font-semibold rounded-md border transition-colors ${reception === 'nao_recebido' ? 'bg-red-500 text-white border-red-500' : 'bg-white text-red-600 border-red-200 hover:bg-red-50'}`}
+                                                    >
+                                                        ✕ Não recebido
+                                                    </button>
+                                                    {reception === 'parcial' && (
+                                                        <input
+                                                            type="number" min={0} max={item.quantidade_atendida}
+                                                            value={itemQtyEdit[item.id] ?? 0}
+                                                            onChange={e => setItemQtyEdit(p => ({ ...p, [item.id]: parseInt(e.target.value) || 0 }))}
+                                                            placeholder="Qtd"
+                                                            className="w-16 border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-[#001A72]"
+                                                        />
+                                                    )}
+                                                </div>
+                                            </td>
+                                        )}
+
+                                        {/* Qty received — read-only after Recebido */}
+                                        {status === 'Recebido' && (
+                                            <td className="px-4 py-3.5 text-right font-semibold text-slate-700">
+                                                {item.quantidade_recebida}
+                                            </td>
+                                        )}
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
             </div>
 
-            {/* Save Recebimento Button (solicitante, status===Realizado) */}
+            {/* Confirmar Recebimento — solicitante, status Realizado */}
             {canSolicitante && status === 'Realizado' && (
-                <div className="flex justify-end">
+                <div className="flex items-center justify-between bg-white rounded-xl shadow-sm border border-slate-100 px-6 py-4">
+                    {!allReceptionSet && (
+                        <p className="text-xs text-slate-500">Marque o status de recebimento de cada item acima antes de confirmar.</p>
+                    )}
+                    {allReceptionSet && <span />}
                     <button
                         onClick={handleSaveRecebimento}
-                        disabled={saving}
+                        disabled={saving || !allReceptionSet}
                         className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                     >
                         {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
