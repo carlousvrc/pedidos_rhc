@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { mockPedidos, mockPedidosItens, mockItens } from '@/lib/mockData';
 import type { Usuario } from '@/lib/auth';
-import { ChevronRight, Download, Save, Upload, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { ChevronRight, Download, Save, Upload, RefreshCw, CheckCircle2, Pencil } from 'lucide-react';
 
 interface PedidoDetailProps {
     id: string;
@@ -332,6 +332,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
 
     const canComprador = role === 'comprador' || role === 'admin';
     const canSolicitante = role === 'solicitante' || role === 'admin';
+    const canEdit = currentUser?.permissoes?.modulos?.usuarios === true;
     const status = pedido.status;
 
     return (
@@ -353,6 +354,15 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                         <div className="flex items-center gap-3 mb-3">
                             <h1 className="text-2xl font-bold text-slate-900">Pedido #{pedido.numero_pedido}</h1>
                             <StatusBadge status={status} />
+                            {canEdit && (
+                                <Link
+                                    href={`/dashboard/pedidos/${pedido.id}/editar`}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
+                                >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                    Editar
+                                </Link>
+                            )}
                             {updating && (
                                 <span className="flex items-center gap-1 text-xs text-slate-400">
                                     <RefreshCw className="w-3 h-3 animate-spin" /> Atualizando...
