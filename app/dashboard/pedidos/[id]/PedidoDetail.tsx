@@ -297,25 +297,32 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
         URL.revokeObjectURL(url);
     }
 
-    function getAtendidaColor(qtdAtendida: number, qtdPedida: number) {
-        if (qtdPedida === 0) return 'text-slate-500';
-        if (qtdAtendida >= qtdPedida) return 'text-green-700 font-semibold';
-        if (qtdAtendida > 0) return 'text-yellow-700 font-semibold';
-        return 'text-red-600 font-semibold';
+    function getSituacao(atendida: number, pedida: number): 'atendido' | 'parcial' | 'nao_atendido' {
+        if (atendida >= pedida) return 'atendido';
+        if (atendida > 0) return 'parcial';
+        return 'nao_atendido';
     }
 
     function getDiffColor(diff: number) {
+        if (diff === 0) return 'text-slate-500';
         if (diff > 0) return 'text-green-700';
-        if (diff < 0) return 'text-red-600';
-        return 'text-slate-500';
+        return 'text-red-600 font-semibold';
     }
 
     function getRowHighlight(item: PedidoItem, status: string) {
-        if (status !== 'Recebido') return '';
-        const recebida = localEdits[item.id]?.quantidade_recebida ?? item.quantidade_recebida;
-        if (recebida >= item.quantidade) return 'bg-green-50/60';
-        if (recebida > 0) return 'bg-yellow-50/60';
-        return 'bg-red-50/40';
+        if (status === 'Realizado') {
+            const s = getSituacao(item.quantidade_atendida, item.quantidade);
+            if (s === 'atendido') return 'bg-green-50/50';
+            if (s === 'parcial') return 'bg-yellow-50/60';
+            return 'bg-red-50/50';
+        }
+        if (status === 'Recebido') {
+            const recebida = localEdits[item.id]?.quantidade_recebida ?? item.quantidade_recebida;
+            if (recebida >= item.quantidade) return 'bg-green-50/50';
+            if (recebida > 0) return 'bg-yellow-50/60';
+            return 'bg-red-50/50';
+        }
+        return '';
     }
 
     if (loading) {
@@ -499,20 +506,75 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
 
             {/* Items Table */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="px-6 py-5 border-b border-slate-100">
-                    <h2 className="text-lg font-bold text-slate-800">Itens do Pedido</h2>
+                <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+                    <div>
+                        <h2 className="text-lg font-bold text-slate-800">Itens do Pedido</h2>
+                        <p className="text-xs text-slate-400 mt-0.5">{items.length} item(s)</p>
+                    </div>
                 </div>
+
+                {/* Comparison summary — shown after PDF is processed */}
+                {status !== 'Pendente' && items.length > 0 && (() => {
+                    const atendidos  = items.filter(i => getSituacao(i.quantidade_atendida, i.quantidade) === 'atendido').length;
+                    const parciais   = items.filter(i => getSituacao(i.quantidade_atendida, i.quantidade) === 'parcial').length;
+                    const naoAtend   = items.filter(i => getSituacao(i.quantidade_atendida, i.quantidade) === 'nao_atendido').length;
+                    const totalPed   = items.reduce((s, i) => s + i.quantidade, 0);
+                    const totalAtend = items.reduce((s, i) => s + i.quantidade_atendida, 0);
+                    const diff       = totalAtend - totalPed;
+                    return (
+                        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/60 space-y-3">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                <div className="bg-white rounded-lg border border-slate-100 px-4 py-3">
+                                    <p className="text-xs text-slate-500">Total de itens</p>
+                                    <p className="text-2xl font-bold text-slate-800 mt-0.5">{items.length}</p>
+                                </div>
+                                <div className="bg-green-50 rounded-lg border border-green-100 px-4 py-3">
+                                    <p className="text-xs text-green-700 font-medium">Atendidos</p>
+                                    <p className="text-2xl font-bold text-green-700 mt-0.5">{atendidos}</p>
+                                </div>
+                                <div className={`rounded-lg border px-4 py-3 ${parciais > 0 ? 'bg-yellow-50 border-yellow-100' : 'bg-white border-slate-100'}`}>
+                                    <p className={`text-xs font-medium ${parciais > 0 ? 'text-yellow-700' : 'text-slate-400'}`}>Parcialmente</p>
+                                    <p className={`text-2xl font-bold mt-0.5 ${parciais > 0 ? 'text-yellow-700' : 'text-slate-300'}`}>{parciais}</p>
+                                </div>
+                                <div className={`rounded-lg border px-4 py-3 ${naoAtend > 0 ? 'bg-red-50 border-red-100' : 'bg-white border-slate-100'}`}>
+                                    <p className={`text-xs font-medium ${naoAtend > 0 ? 'text-red-600' : 'text-slate-400'}`}>Não atendidos</p>
+                                    <p className={`text-2xl font-bold mt-0.5 ${naoAtend > 0 ? 'text-red-600' : 'text-slate-300'}`}>{naoAtend}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-4 text-xs text-slate-500">
+                                <span>Qtd solicitada: <strong className="text-slate-700">{totalPed}</strong></span>
+                                <span>Qtd atendida: <strong className="text-slate-700">{totalAtend}</strong></span>
+                                <span>Diferença total:
+                                    <strong className={diff < 0 ? 'text-red-600 ml-1' : diff > 0 ? 'text-green-700 ml-1' : 'text-slate-500 ml-1'}>
+                                        {diff > 0 ? `+${diff}` : diff}
+                                    </strong>
+                                </span>
+                            </div>
+                            {(parciais > 0 || naoAtend > 0) && canSolicitante && status === 'Realizado' && (
+                                <p className="text-xs text-[#001A72] font-medium bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                                    Verifique os itens marcados em amarelo e vermelho abaixo, preencha as quantidades recebidas e confirme o recebimento.
+                                </p>
+                            )}
+                        </div>
+                    );
+                })()}
+
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-slate-100 text-sm">
                         <thead className="bg-slate-50">
                             <tr>
                                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider w-8">#</th>
+                                {status !== 'Pendente' && (
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Situação</th>
+                                )}
                                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Produto</th>
                                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Código</th>
                                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Tipo</th>
                                 <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Qtd Pedida</th>
-                                <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Qtd Atendida</th>
-                                <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Diferença</th>
+                                {status !== 'Pendente' && (<>
+                                    <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Qtd Atendida</th>
+                                    <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Diferença</th>
+                                </>)}
                                 <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Qtd Recebida</th>
                                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Observação</th>
                             </tr>
@@ -520,29 +582,55 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                         <tbody className="bg-white divide-y divide-slate-100">
                             {items.length === 0 ? (
                                 <tr>
-                                    <td colSpan={9} className="px-6 py-10 text-center text-slate-500">
+                                    <td colSpan={status !== 'Pendente' ? 10 : 7} className="px-6 py-10 text-center text-slate-500">
                                         Nenhum item encontrado para este pedido.
                                     </td>
                                 </tr>
                             ) : (
                                 items.map((item, idx) => {
                                     const diff = item.quantidade_atendida - item.quantidade;
+                                    const situacao = getSituacao(item.quantidade_atendida, item.quantidade);
                                     const editData = localEdits[item.id] ?? { quantidade_recebida: item.quantidade_recebida, observacao: item.observacao };
                                     const canEdit = canSolicitante && status === 'Realizado';
                                     return (
-                                        <tr key={item.id} className={`transition-colors hover:bg-slate-50/50 ${getRowHighlight(item, status)}`}>
-                                            <td className="px-4 py-4 text-xs text-slate-400 font-mono">{idx + 1}</td>
-                                            <td className="px-4 py-4 text-slate-800 font-medium max-w-xs truncate">{item.itens.nome}</td>
-                                            <td className="px-4 py-4 text-slate-500 font-mono">{item.itens.codigo}</td>
-                                            <td className="px-4 py-4 text-slate-500">{item.itens.tipo || '—'}</td>
-                                            <td className="px-4 py-4 text-right text-slate-900 font-medium">{item.quantidade}</td>
-                                            <td className={`px-4 py-4 text-right ${getAtendidaColor(item.quantidade_atendida, item.quantidade)}`}>
-                                                {item.quantidade_atendida}
-                                            </td>
-                                            <td className={`px-4 py-4 text-right ${getDiffColor(diff)}`}>
-                                                {diff > 0 ? `+${diff}` : diff}
-                                            </td>
-                                            <td className="px-4 py-4 text-right">
+                                        <tr key={item.id} className={`transition-colors hover:brightness-95 ${getRowHighlight(item, status)}`}>
+                                            <td className="px-4 py-3.5 text-xs text-slate-400 font-mono">{idx + 1}</td>
+                                            {status !== 'Pendente' && (
+                                                <td className="px-4 py-3.5">
+                                                    {situacao === 'atendido' && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-green-100 text-green-700">
+                                                            <CheckCircle2 className="w-3 h-3" /> Atendido
+                                                        </span>
+                                                    )}
+                                                    {situacao === 'parcial' && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-yellow-100 text-yellow-700">
+                                                            <span className="w-3 h-3 text-center leading-none">~</span> Parcial
+                                                        </span>
+                                                    )}
+                                                    {situacao === 'nao_atendido' && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-red-100 text-red-700">
+                                                            <span className="w-3 h-3 text-center leading-none font-bold">✕</span> Não atendido
+                                                        </span>
+                                                    )}
+                                                </td>
+                                            )}
+                                            <td className="px-4 py-3.5 text-slate-800 font-medium max-w-xs truncate">{item.itens.nome}</td>
+                                            <td className="px-4 py-3.5 text-slate-500 font-mono">{item.itens.codigo}</td>
+                                            <td className="px-4 py-3.5 text-slate-500">{item.itens.tipo || '—'}</td>
+                                            <td className="px-4 py-3.5 text-right text-slate-900 font-semibold">{item.quantidade}</td>
+                                            {status !== 'Pendente' && (<>
+                                                <td className="px-4 py-3.5 text-right font-semibold">
+                                                    <span className={
+                                                        situacao === 'atendido' ? 'text-green-700' :
+                                                        situacao === 'parcial'  ? 'text-yellow-700' :
+                                                        'text-red-600'
+                                                    }>{item.quantidade_atendida}</span>
+                                                </td>
+                                                <td className={`px-4 py-3.5 text-right font-semibold ${getDiffColor(diff)}`}>
+                                                    {diff > 0 ? `+${diff}` : diff === 0 ? '—' : diff}
+                                                </td>
+                                            </>)}
+                                            <td className="px-4 py-3.5 text-right">
                                                 {canEdit ? (
                                                     <input
                                                         type="number"
@@ -558,7 +646,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                                     <span className="text-slate-600">{item.quantidade_recebida}</span>
                                                 )}
                                             </td>
-                                            <td className="px-4 py-4">
+                                            <td className="px-4 py-3.5">
                                                 {canEdit ? (
                                                     <input
                                                         type="text"
