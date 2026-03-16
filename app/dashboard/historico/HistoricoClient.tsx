@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { Search, FileText, Clock, ArrowRight, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import ConfirmModal from '@/app/components/ConfirmModal';
 
 interface Pedido {
     id: string;
@@ -42,12 +43,14 @@ export default function HistoricoClient({ pedidos, scope, canDelete }: Props) {
     const [search, setSearch] = useState('');
     const [activeTab, setActiveTab] = useState<typeof STATUS_TABS[number]>('Todos');
     const [lista, setLista] = useState<Pedido[]>(pedidos);
+    const [deleteTarget, setDeleteTarget] = useState<{ id: string; numero: string } | null>(null);
 
-    async function handleDelete(id: string, numero: string) {
-        if (!confirm(`Excluir o pedido #${numero}? Esta ação não pode ser desfeita.`)) return;
-        await supabase.from('pedidos_itens').delete().eq('pedido_id', id);
-        await supabase.from('pedidos').delete().eq('id', id);
-        setLista(prev => prev.filter(p => p.id !== id));
+    async function confirmDelete() {
+        if (!deleteTarget) return;
+        await supabase.from('pedidos_itens').delete().eq('pedido_id', deleteTarget.id);
+        await supabase.from('pedidos').delete().eq('id', deleteTarget.id);
+        setLista(prev => prev.filter(p => p.id !== deleteTarget.id));
+        setDeleteTarget(null);
     }
 
     const counts = useMemo(() => ({
@@ -67,9 +70,10 @@ export default function HistoricoClient({ pedidos, scope, canDelete }: Props) {
                 (p.unidades?.nome ?? '').toLowerCase().includes(term);
             return matchTab && matchSearch;
         });
-    }, [pedidos, search, activeTab]);
+    }, [lista, search, activeTab]);
 
     return (
+    <>
         <div className="max-w-[1400px] mx-auto space-y-6">
 
             {/* Header */}
@@ -193,7 +197,7 @@ export default function HistoricoClient({ pedidos, scope, canDelete }: Props) {
                                                 </Link>
                                                 {canDelete && (
                                                     <button
-                                                        onClick={() => handleDelete(pedido.id, pedido.numero_pedido)}
+                                                        onClick={() => setDeleteTarget({ id: pedido.id, numero: pedido.numero_pedido })}
                                                         className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
                                                         title="Excluir pedido"
                                                     >
@@ -216,5 +220,15 @@ export default function HistoricoClient({ pedidos, scope, canDelete }: Props) {
                 )}
             </div>
         </div>
+
+        {deleteTarget && (
+            <ConfirmModal
+                title="Excluir pedido"
+                description={`O pedido #${deleteTarget.numero} será excluído permanentemente. Esta ação não pode ser desfeita.`}
+                onConfirm={confirmDelete}
+                onCancel={() => setDeleteTarget(null)}
+            />
+        )}
+    </>
     );
 }

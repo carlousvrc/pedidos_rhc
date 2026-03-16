@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { FileText, Clock, CheckCircle, Plus, RefreshCw, ShoppingCart, Search, X, Trash2 } from 'lucide-react';
 import type { Usuario } from '@/lib/auth';
+import ConfirmModal from './components/ConfirmModal';
 
 interface DashboardClientProps {
     currentUser: Usuario | null;
@@ -56,6 +57,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
     const [filterUnidade, setFilterUnidade] = useState('');
     const [filterData, setFilterData] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
+    const [deleteTarget, setDeleteTarget] = useState<{ id: string; numero: string } | null>(null);
 
     // Initial fetch
     useEffect(() => {
@@ -111,11 +113,12 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
     const canDelete = currentUser?.permissoes?.modulos?.usuarios === true;
     const hasFilters = filterNumero || filterUnidade || filterData || filterStatus;
 
-    async function handleDelete(id: string, numero: string) {
-        if (!confirm(`Excluir o pedido #${numero}? Esta ação não pode ser desfeita.`)) return;
-        await supabase.from('pedidos_itens').delete().eq('pedido_id', id);
-        await supabase.from('pedidos').delete().eq('id', id);
-        setPedidos(prev => prev.filter(p => p.id !== id));
+    async function confirmDelete() {
+        if (!deleteTarget) return;
+        await supabase.from('pedidos_itens').delete().eq('pedido_id', deleteTarget.id);
+        await supabase.from('pedidos').delete().eq('id', deleteTarget.id);
+        setPedidos(prev => prev.filter(p => p.id !== deleteTarget.id));
+        setDeleteTarget(null);
     }
 
     function clearFilters() {
@@ -323,7 +326,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                                                     </Link>
                                                     {canDelete && (
                                                         <button
-                                                            onClick={() => handleDelete(pedido.id, pedido.numero_pedido)}
+                                                            onClick={() => setDeleteTarget({ id: pedido.id, numero: pedido.numero_pedido })}
                                                             className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
                                                             title="Excluir pedido"
                                                         >
@@ -347,6 +350,15 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                     </div>
                 )}
             </div>
+
+            {deleteTarget && (
+                <ConfirmModal
+                    title="Excluir pedido"
+                    description={`O pedido #${deleteTarget.numero} será excluído permanentemente. Esta ação não pode ser desfeita.`}
+                    onConfirm={confirmDelete}
+                    onCancel={() => setDeleteTarget(null)}
+                />
+            )}
         </div>
     );
 }
