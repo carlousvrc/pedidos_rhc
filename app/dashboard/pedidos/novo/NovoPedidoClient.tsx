@@ -129,17 +129,20 @@ export default function NovoPedidoClient({ currentUser }: Props) {
                 searchField: ['text', 'codigo', 'referencia'],
                 placeholder: 'Buscar por descrição, código ou referência...',
                 maxOptions: 60,
+                maxItems: null,
                 closeAfterSelect: true,
                 onItemAdd(value: string) {
                     const item = itens.find(i => i.id === value);
                     if (item && !selectedIdsRef.current.has(item.id)) {
                         setSelectedItens(prev => [...prev, { ...item, quantidade: 1 }]);
                     }
-                    setTimeout(() => {
-                        tomSelectRef.current?.clear();
-                        tomSelectRef.current?.clearOptions();
-                        tomSelectRef.current?.addOptions(options);
-                    }, 0);
+                    // Remove o item do TomSelect imediatamente para que o campo
+                    // fique limpo e pronto para a próxima busca
+                    requestAnimationFrame(() => {
+                        tomSelectRef.current?.clear(true);
+                        tomSelectRef.current?.setTextboxValue('');
+                        tomSelectRef.current?.refreshOptions(false);
+                    });
                 },
                 render: {
                     option(data: any) {
