@@ -58,6 +58,8 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
     const [filterData, setFilterData] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
     const [deleteTarget, setDeleteTarget] = useState<{ id: string; numero: string } | null>(null);
+    const [selected, setSelected] = useState<Set<string>>(new Set());
+    const [bulkDeleting, setBulkDeleting] = useState(false);
 
     // Initial fetch
     useEffect(() => {
@@ -118,7 +120,35 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
         await supabase.from('pedidos_itens').delete().eq('pedido_id', deleteTarget.id);
         await supabase.from('pedidos').delete().eq('id', deleteTarget.id);
         setPedidos(prev => prev.filter(p => p.id !== deleteTarget.id));
+        setSelected(prev => { const s = new Set(prev); s.delete(deleteTarget.id); return s; });
         setDeleteTarget(null);
+    }
+
+    async function confirmBulkDelete() {
+        setBulkDeleting(false);
+        const ids = Array.from(selected);
+        for (const id of ids) {
+            await supabase.from('pedidos_itens').delete().eq('pedido_id', id);
+            await supabase.from('pedidos').delete().eq('id', id);
+        }
+        setPedidos(prev => prev.filter(p => !ids.includes(p.id)));
+        setSelected(new Set());
+    }
+
+    function toggleSelect(id: string) {
+        setSelected(prev => {
+            const s = new Set(prev);
+            s.has(id) ? s.delete(id) : s.add(id);
+            return s;
+        });
+    }
+
+    function toggleSelectAll() {
+        if (selected.size === filteredPedidos.length) {
+            setSelected(new Set());
+        } else {
+            setSelected(new Set(filteredPedidos.map((p: any) => p.id)));
+        }
     }
 
     function clearFilters() {
@@ -269,10 +299,42 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                     </div>
                 </div>
 
+                {/* Bulk action bar */}
+                {canDelete && selected.size > 0 && (
+                    <div className="px-6 py-3 bg-red-50 border-b border-red-100 flex items-center justify-between">
+                        <span className="text-sm text-red-700 font-medium">
+                            {selected.size} pedido{selected.size !== 1 ? 's' : ''} selecionado{selected.size !== 1 ? 's' : ''}
+                        </span>
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => setSelected(new Set())} className="text-xs text-slate-500 hover:text-slate-700 px-3 py-1.5 rounded-md hover:bg-white transition-colors">
+                                Desmarcar
+                            </button>
+                            <button
+                                onClick={() => setBulkDeleting(true)}
+                                className="flex items-center gap-1.5 text-xs font-medium text-white bg-red-500 hover:bg-red-600 px-3 py-1.5 rounded-md transition-colors"
+                            >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                Excluir selecionados
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-slate-100">
                         <thead className="bg-slate-50">
                             <tr>
+                                {canDelete && (
+                                    <th className="pl-4 pr-2 py-3.5 w-10">
+                                        <input
+                                            type="checkbox"
+                                            checked={filteredPedidos.length > 0 && selected.size === filteredPedidos.length}
+                                            ref={el => { if (el) el.indeterminate = selected.size > 0 && selected.size < filteredPedidos.length; }}
+                                            onChange={toggleSelectAll}
+                                            className="w-4 h-4 rounded border-slate-300 text-[#001A72] focus:ring-[#001A72] cursor-pointer"
+                                        />
+                                    </th>
+                                )}
                                 <th className="px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Nº Pedido</th>
                                 <th className="px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Unidade</th>
                                 <th className="px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Data</th>
@@ -285,19 +347,29 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                         <tbody className="bg-white divide-y divide-slate-100">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={scope !== 'operador' ? 5 : 4} className="px-6 py-12 text-center text-slate-400 text-sm">
+                                    <td colSpan={canDelete ? (scope !== 'operador' ? 6 : 5) : (scope !== 'operador' ? 5 : 4)} className="px-6 py-12 text-center text-slate-400 text-sm">
                                         Carregando pedidos...
                                     </td>
                                 </tr>
                             ) : filteredPedidos.length === 0 ? (
                                 <tr>
-                                    <td colSpan={scope !== 'operador' ? 5 : 4} className="px-6 py-12 text-center text-slate-500 text-sm">
+                                    <td colSpan={canDelete ? (scope !== 'operador' ? 6 : 5) : (scope !== 'operador' ? 5 : 4)} className="px-6 py-12 text-center text-slate-500 text-sm">
                                         {hasFilters ? 'Nenhum pedido encontrado com os filtros aplicados.' : 'Nenhum pedido encontrado.'}
                                     </td>
                                 </tr>
                             ) : (
                                 filteredPedidos.map((pedido: any) => (
-                                    <tr key={pedido.id} className="hover:bg-slate-50/50 transition-colors group">
+                                    <tr key={pedido.id} className={`hover:bg-slate-50/50 transition-colors group ${selected.has(pedido.id) ? 'bg-red-50/40' : ''}`}>
+                                        {canDelete && (
+                                            <td className="pl-4 pr-2 py-4 w-10">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selected.has(pedido.id)}
+                                                    onChange={() => toggleSelect(pedido.id)}
+                                                    className="w-4 h-4 rounded border-slate-300 text-[#001A72] focus:ring-[#001A72] cursor-pointer"
+                                                />
+                                            </td>
+                                        )}
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
                                             <div className="flex items-center gap-2">
                                                 <FileText className="w-4 h-4 text-slate-400" />
@@ -357,6 +429,14 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                     description={`O pedido #${deleteTarget.numero} será excluído permanentemente. Esta ação não pode ser desfeita.`}
                     onConfirm={confirmDelete}
                     onCancel={() => setDeleteTarget(null)}
+                />
+            )}
+            {bulkDeleting && (
+                <ConfirmModal
+                    title={`Excluir ${selected.size} pedido${selected.size !== 1 ? 's' : ''}`}
+                    description={`${selected.size} pedido${selected.size !== 1 ? 's' : ''} será${selected.size !== 1 ? 'ão' : ''} excluído${selected.size !== 1 ? 's' : ''} permanentemente. Esta ação não pode ser desfeita.`}
+                    onConfirm={confirmBulkDelete}
+                    onCancel={() => setBulkDeleting(false)}
                 />
             )}
         </div>
