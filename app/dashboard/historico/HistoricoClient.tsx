@@ -8,7 +8,7 @@ interface Pedido {
     id: string;
     numero_pedido: string;
     status: string;
-    data_pedido: string;
+    created_at: string;
     unidades?: { nome: string };
     usuario_id?: string;
 }
@@ -159,7 +159,7 @@ export default function HistoricoClient({ pedidos, scope }: Props) {
                                             {pedido.unidades?.nome || '—'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                                            {new Date(pedido.data_pedido).toLocaleDateString('pt-BR')}
+                                            {new Date(pedido.created_at).toLocaleDateString('pt-BR')}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <span className={`px-2.5 py-0.5 inline-flex text-[11px] leading-5 font-semibold rounded-full capitalize ${getStatusBadge(pedido.status)}`}>

@@ -34,7 +34,7 @@ async function fetchPedidos(currentUser: Usuario | null): Promise<any[]> {
     const scope = currentUser?.permissoes?.scope ?? 'operador';
     let query = supabase
         .from('pedidos')
-        .select('id, numero_pedido, status, data_pedido, unidades(nome), usuario_id')
+        .select('id, numero_pedido, status, created_at, unidades(nome), usuario_id')
         .order('id', { ascending: false })
         .limit(200);
 
@@ -43,10 +43,7 @@ async function fetchPedidos(currentUser: Usuario | null): Promise<any[]> {
     }
 
     const { data, error } = await query;
-    if (error) {
-        console.error('fetchPedidos error:', JSON.stringify(error));
-        alert(`Erro ao carregar pedidos: ${error.message}`);
-    }
+    if (error) console.error('fetchPedidos error:', error.message);
     return data ?? [];
 }
 
@@ -98,7 +95,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
             if (filterUnidade && p.unidades?.nome !== filterUnidade) return false;
             if (filterStatus && p.status?.toLowerCase() !== filterStatus.toLowerCase()) return false;
             if (filterData) {
-                const pedidoDate = new Date(p.data_pedido).toISOString().slice(0, 10);
+                const pedidoDate = new Date(p.created_at).toISOString().slice(0, 10);
                 if (pedidoDate !== filterData) return false;
             }
             return true;
@@ -300,7 +297,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                                             {pedido.unidades?.nome || 'Não informada'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                                            {pedido.data_pedido ? new Date(pedido.data_pedido).toLocaleDateString('pt-BR') : '—'}
+                                            {pedido.created_at ? new Date(pedido.created_at).toLocaleDateString('pt-BR') : '—'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <span className={`px-2.5 py-0.5 inline-flex text-[11px] leading-5 font-semibold rounded-full capitalize ${getStatusBadge(pedido.status)}`}>

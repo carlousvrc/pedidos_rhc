@@ -31,7 +31,7 @@ interface Pedido {
     id: string;
     numero_pedido: string;
     status: string;
-    data_pedido: string;
+    created_at: string;
     unidade_id: string;
     usuario_id?: string;
     unidades?: { nome: string };
@@ -374,7 +374,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                             <div>
                                 <p className="text-slate-500 mb-0.5">Data</p>
                                 <p className="font-medium text-slate-900">
-                                    {new Date(pedido.data_pedido).toLocaleDateString('pt-BR')}
+                                    {new Date(pedido.created_at).toLocaleDateString('pt-BR')}
                                 </p>
                             </div>
                             <div>

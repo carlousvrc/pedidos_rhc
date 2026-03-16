@@ -10,8 +10,8 @@ export default async function HistoricoPage() {
 
     let query = supabase
         .from('pedidos')
-        .select('id, numero_pedido, status, data_pedido, unidades(nome), usuario_id')
-        .order('data_pedido', { ascending: false });
+        .select('id, numero_pedido, status, created_at, unidades(nome), usuario_id')
+        .order('created_at', { ascending: false });
 
     if (scope === 'operador' && currentUser) {
         query = query.eq('usuario_id', currentUser.id);
