@@ -36,21 +36,32 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
         setLoading(true);
 
         const unidadeId = currentUser.unidade_id;
+        const role = currentUser.role;
 
-        // Base query — fetch all remanejamentos
-        let query = supabase
-            .from('remanejamentos')
-            .select('*')
-            .order('created_at', { ascending: false });
+        // Admin/comprador: show all. Solicitante: only their unit
+        const showAll = role === 'admin' || role === 'comprador';
 
-        // Solicitante: only transfers TO their unit
-        if (unidadeId) {
-            query = query.eq('unidade_destino_id', unidadeId);
+        let rems: any[] = [];
+
+        if (showAll) {
+            const { data, error: err } = await supabase
+                .from('remanejamentos')
+                .select('*')
+                .order('created_at', { ascending: false });
+            if (err) console.log('remanejamentos query error:', err);
+            rems = data || [];
+        } else if (unidadeId) {
+            // Solicitante: show transfers TO their unit
+            const { data, error: err } = await supabase
+                .from('remanejamentos')
+                .select('*')
+                .eq('unidade_destino_id', unidadeId)
+                .order('created_at', { ascending: false });
+            if (err) console.log('remanejamentos query error:', err);
+            rems = data || [];
         }
 
-        const { data: rems, error } = await query;
-        if (error || !rems || rems.length === 0) {
-            console.log('remanejamentos query:', error, rems);
+        if (rems.length === 0) {
             setTransferencias([]);
             setLoading(false);
             return;
