@@ -201,22 +201,53 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
     }
 
     return (
-        <div className="max-w-[1400px] mx-auto space-y-6">
-
-            {/* Page Header */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div className="flex items-center gap-3">
-                    <div className="bg-white rounded-lg px-2 py-1 shadow-sm border border-slate-100">
-                        <img src="/logo.png" alt="Hospital Casa Logo" className="h-10 w-auto object-contain" />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-bold text-slate-800 tracking-tight">RHC Pedidos</h1>
-                        <p className="text-slate-500 text-sm">Visão geral e acesso rápido aos pedidos hospitalares.</p>
+        <>
+        {/* Top bar */}
+        <div className="bg-[#001A72] shadow-md -mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6 lg:-mt-8 mb-6 px-4 sm:px-8">
+            <div className="max-w-[1400px] mx-auto h-16 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <Link href="/" className="flex items-center gap-2.5">
+                        <div className="bg-white rounded-lg px-2 py-1">
+                            <img src="/logo.png" alt="Hospital Casa Logo" className="h-9 w-auto object-contain" />
+                        </div>
+                        <span className="text-base font-bold text-white tracking-tight hidden lg:block">RHC Pedidos</span>
+                    </Link>
+                    <div className="hidden md:flex items-center gap-0.5 ml-2">
+                        {canCreateOrder && (
+                            <Link href="/dashboard/pedidos/novo" className="px-3 py-1.5 rounded-md text-xs font-medium text-white/80 hover:bg-[#001250] hover:text-white transition-colors">
+                                Novo Pedido
+                            </Link>
+                        )}
+                        {currentUser?.permissoes?.modulos?.historico !== false && (
+                            <Link href="/dashboard/historico" className="px-3 py-1.5 rounded-md text-xs font-medium text-white/80 hover:bg-[#001250] hover:text-white transition-colors">
+                                Histórico
+                            </Link>
+                        )}
+                        {currentUser?.permissoes?.modulos?.transferencias !== false && (
+                            <Link href="/dashboard/transferencias" className="px-3 py-1.5 rounded-md text-xs font-medium text-white/80 hover:bg-[#001250] hover:text-white transition-colors">
+                                Transferências
+                            </Link>
+                        )}
+                        {currentUser?.permissoes?.modulos?.relatorios && (
+                            <Link href="/dashboard/relatorios" className="px-3 py-1.5 rounded-md text-xs font-medium text-white/80 hover:bg-[#001250] hover:text-white transition-colors">
+                                Relatórios
+                            </Link>
+                        )}
+                        {currentUser?.permissoes?.modulos?.itens && (
+                            <Link href="/dashboard/itens" className="px-3 py-1.5 rounded-md text-xs font-medium text-white/80 hover:bg-[#001250] hover:text-white transition-colors">
+                                Itens
+                            </Link>
+                        )}
+                        {currentUser?.permissoes?.modulos?.usuarios && (
+                            <Link href="/dashboard/usuarios" className="px-3 py-1.5 rounded-md text-xs font-medium text-white/80 hover:bg-[#001250] hover:text-white transition-colors">
+                                Usuários
+                            </Link>
+                        )}
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
                     {(loading || updating) && (
-                        <span className="flex items-center gap-1.5 text-xs text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">
+                        <span className="flex items-center gap-1.5 text-xs text-white/70 px-3 py-1.5 rounded-full">
                             <RefreshCw className="w-3 h-3 animate-spin" />
                             {loading ? 'Carregando...' : 'Atualizando...'}
                         </span>
@@ -224,7 +255,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                     <form action={logoutUser}>
                         <button
                             type="submit"
-                            className="flex items-center gap-2 px-3 py-2 text-sm text-slate-600 bg-slate-100 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
+                            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-white/80 hover:bg-[#001250] hover:text-white rounded-md transition-colors"
                             title="Sair do sistema"
                         >
                             <LogOut className="w-4 h-4" />
@@ -233,6 +264,9 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                     </form>
                 </div>
             </div>
+        </div>
+
+        <div className="max-w-[1400px] mx-auto space-y-6">
 
             {/* Status Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
@@ -305,64 +339,6 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                         <div className="h-1.5 rounded-full bg-green-500 transition-all" style={{ width: totalPedidos ? `${(recebidos / totalPedidos) * 100}%` : '0%' }} />
                     </div>
                 </div>
-            </div>
-
-            {/* Quick Access Modules */}
-            <div className="flex gap-3 overflow-x-auto pb-1">
-                {canCreateOrder && (
-                    <Link href="/dashboard/pedidos/novo" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
-                        <div className="p-2.5 bg-blue-50 text-[#001A72] rounded-lg w-fit group-hover:bg-[#001A72] group-hover:text-white transition-colors">
-                            <Plus className="w-5 h-5" />
-                        </div>
-                        <p className="text-sm font-semibold text-slate-800 mt-3">Novo Pedido</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">Criar solicitação</p>
-                    </Link>
-                )}
-                {currentUser?.permissoes?.modulos?.historico !== false && (
-                    <Link href="/dashboard/historico" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
-                        <div className="p-2.5 bg-slate-50 text-slate-600 rounded-lg w-fit group-hover:bg-[#001A72] group-hover:text-white transition-colors">
-                            <History className="w-5 h-5" />
-                        </div>
-                        <p className="text-sm font-semibold text-slate-800 mt-3">Histórico</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">Pedidos anteriores</p>
-                    </Link>
-                )}
-                {currentUser?.permissoes?.modulos?.transferencias !== false && (
-                    <Link href="/dashboard/transferencias" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-purple-300 hover:shadow-md transition-all group">
-                        <div className="p-2.5 bg-purple-50 text-purple-600 rounded-lg w-fit group-hover:bg-purple-600 group-hover:text-white transition-colors">
-                            <ArrowRightLeft className="w-5 h-5" />
-                        </div>
-                        <p className="text-sm font-semibold text-slate-800 mt-3">Transferências</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">Remanejamentos</p>
-                    </Link>
-                )}
-                {currentUser?.permissoes?.modulos?.relatorios && (
-                    <Link href="/dashboard/relatorios" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
-                        <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-lg w-fit group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                            <BarChart3 className="w-5 h-5" />
-                        </div>
-                        <p className="text-sm font-semibold text-slate-800 mt-3">Relatórios</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">Dados e análises</p>
-                    </Link>
-                )}
-                {currentUser?.permissoes?.modulos?.itens && (
-                    <Link href="/dashboard/itens" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
-                        <div className="p-2.5 bg-orange-50 text-orange-600 rounded-lg w-fit group-hover:bg-orange-600 group-hover:text-white transition-colors">
-                            <Package className="w-5 h-5" />
-                        </div>
-                        <p className="text-sm font-semibold text-slate-800 mt-3">Itens</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">Catálogo de produtos</p>
-                    </Link>
-                )}
-                {currentUser?.permissoes?.modulos?.usuarios && (
-                    <Link href="/dashboard/usuarios" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
-                        <div className="p-2.5 bg-violet-50 text-violet-600 rounded-lg w-fit group-hover:bg-violet-600 group-hover:text-white transition-colors">
-                            <Users className="w-5 h-5" />
-                        </div>
-                        <p className="text-sm font-semibold text-slate-800 mt-3">Usuários</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">Gerenciar acessos</p>
-                    </Link>
-                )}
             </div>
 
             {/* Orders Table */}
@@ -565,5 +541,6 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                 />
             )}
         </div>
+        </>
     );
 }
