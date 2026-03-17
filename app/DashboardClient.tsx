@@ -23,27 +23,66 @@ function getStatusBadge(status: string) {
     }
 }
 
-function applyScope(data: any[], currentUser: Usuario | null) {
-    const scope = currentUser?.permissoes?.scope ?? 'operador';
-    if (scope === 'operador' && hasRealId(currentUser?.id)) {
-        return data.filter((p: any) => p.usuario_id === currentUser!.id);
-    }
+function applyScope(data: any[]) {
     return data;
 }
 
 async function fetchPedidos(currentUser: Usuario | null): Promise<any[]> {
     const scope = currentUser?.permissoes?.scope ?? 'operador';
-    let query = supabase
+
+    if (scope === 'operador' && hasRealId(currentUser?.id)) {
+        // Fetch user's own orders
+        const { data: ownOrders } = await supabase
+            .from('pedidos')
+            .select('id, numero_pedido, status, created_at, unidades(nome), usuario_id, usuarios(nome)')
+            .eq('usuario_id', currentUser!.id)
+            .order('created_at', { ascending: false })
+            .limit(200);
+
+        // Fetch orders that have remanejamentos targeting this user's unit
+        let transferOrders: any[] = [];
+        if (currentUser!.unidade_id) {
+            // Get pedido_item_origem_ids from remanejamentos where origin unit = user's unit
+            const { data: rems } = await supabase
+                .from('remanejamentos')
+                .select('pedido_item_origem_id');
+
+            if (rems && rems.length > 0) {
+                const piIds = rems.map(r => r.pedido_item_origem_id);
+                const { data: piData } = await supabase
+                    .from('pedidos_itens')
+                    .select('pedido_id')
+                    .in('id', piIds);
+
+                if (piData && piData.length > 0) {
+                    const pedidoIds = [...new Set(piData.map(p => p.pedido_id))];
+                    const { data: originOrders } = await supabase
+                        .from('pedidos')
+                        .select('id, numero_pedido, status, created_at, unidades(nome), usuario_id, usuarios(nome)')
+                        .in('id', pedidoIds)
+                        .eq('unidade_id', currentUser!.unidade_id);
+
+                    transferOrders = originOrders || [];
+                }
+            }
+        }
+
+        // Merge and deduplicate
+        const merged = new Map<string, any>();
+        for (const p of [...(ownOrders || []), ...transferOrders]) {
+            if (!merged.has(p.id)) merged.set(p.id, p);
+        }
+        return Array.from(merged.values()).sort((a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+    }
+
+    const { data, error } = await supabase
         .from('pedidos')
         .select('id, numero_pedido, status, created_at, unidades(nome), usuario_id, usuarios(nome)')
         .order('created_at', { ascending: false })
         .limit(200);
 
-    if (scope === 'operador' && hasRealId(currentUser?.id)) {
-        query = query.eq('usuario_id', currentUser!.id);
-    }
-
-    const { data, error } = await query;
     if (error) console.error('fetchPedidos error:', error.message);
     return data ?? [];
 }
@@ -65,7 +104,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
     useEffect(() => {
         setLoading(true);
         fetchPedidos(currentUser).then(data => {
-            setPedidos(applyScope(data, currentUser));
+            setPedidos(applyScope(data));
             setLoading(false);
         });
     }, [currentUser]);
@@ -77,7 +116,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => {
                 setUpdating(true);
                 fetchPedidos(currentUser).then(data => {
-                    setPedidos(applyScope(data, currentUser));
+                    setPedidos(applyScope(data));
                     setTimeout(() => setUpdating(false), 600);
                 });
             })
