@@ -251,9 +251,9 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
             </div>
 
             {/* Quick Access Modules */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="flex gap-3 overflow-x-auto pb-1">
                 {canCreateOrder && (
-                    <Link href="/dashboard/pedidos/novo" className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
+                    <Link href="/dashboard/pedidos/novo" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
                         <div className="p-2.5 bg-blue-50 text-[#001A72] rounded-lg w-fit group-hover:bg-[#001A72] group-hover:text-white transition-colors">
                             <Plus className="w-5 h-5" />
                         </div>
@@ -262,7 +262,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                     </Link>
                 )}
                 {currentUser?.permissoes?.modulos?.historico !== false && (
-                    <Link href="/dashboard/historico" className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
+                    <Link href="/dashboard/historico" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
                         <div className="p-2.5 bg-slate-50 text-slate-600 rounded-lg w-fit group-hover:bg-[#001A72] group-hover:text-white transition-colors">
                             <History className="w-5 h-5" />
                         </div>
@@ -271,7 +271,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                     </Link>
                 )}
                 {currentUser?.permissoes?.modulos?.transferencias !== false && (
-                    <Link href="/dashboard/transferencias" className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-purple-300 hover:shadow-md transition-all group">
+                    <Link href="/dashboard/transferencias" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-purple-300 hover:shadow-md transition-all group">
                         <div className="p-2.5 bg-purple-50 text-purple-600 rounded-lg w-fit group-hover:bg-purple-600 group-hover:text-white transition-colors">
                             <ArrowRightLeft className="w-5 h-5" />
                         </div>
@@ -280,7 +280,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                     </Link>
                 )}
                 {currentUser?.permissoes?.modulos?.relatorios && (
-                    <Link href="/dashboard/relatorios" className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
+                    <Link href="/dashboard/relatorios" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
                         <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-lg w-fit group-hover:bg-emerald-600 group-hover:text-white transition-colors">
                             <BarChart3 className="w-5 h-5" />
                         </div>
@@ -289,7 +289,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                     </Link>
                 )}
                 {currentUser?.permissoes?.modulos?.bionexo && (
-                    <Link href="/dashboard/bionexo" className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
+                    <Link href="/dashboard/bionexo" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
                         <div className="p-2.5 bg-sky-50 text-sky-600 rounded-lg w-fit group-hover:bg-sky-600 group-hover:text-white transition-colors">
                             <FileSpreadsheet className="w-5 h-5" />
                         </div>
@@ -298,7 +298,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                     </Link>
                 )}
                 {currentUser?.permissoes?.modulos?.itens && (
-                    <Link href="/dashboard/itens" className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
+                    <Link href="/dashboard/itens" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
                         <div className="p-2.5 bg-orange-50 text-orange-600 rounded-lg w-fit group-hover:bg-orange-600 group-hover:text-white transition-colors">
                             <Package className="w-5 h-5" />
                         </div>
@@ -307,7 +307,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                     </Link>
                 )}
                 {currentUser?.permissoes?.modulos?.usuarios && (
-                    <Link href="/dashboard/usuarios" className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
+                    <Link href="/dashboard/usuarios" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
                         <div className="p-2.5 bg-violet-50 text-violet-600 rounded-lg w-fit group-hover:bg-violet-600 group-hover:text-white transition-colors">
                             <Users className="w-5 h-5" />
                         </div>
