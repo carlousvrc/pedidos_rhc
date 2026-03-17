@@ -7,7 +7,7 @@ import { mockPedidos, mockPedidosItens, mockItens } from '@/lib/mockData';
 import type { Usuario } from '@/lib/auth';
 import {
     ChevronRight, Download, Save, Upload, RefreshCw,
-    CheckCircle2, Pencil, FileText, X,
+    CheckCircle2, Pencil, FileText, X, ArrowRightLeft, Search,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -19,6 +19,7 @@ interface PedidoDetailProps {
 
 interface PedidoItem {
     id: string;
+    item_id: string;
     quantidade: number;
     quantidade_atendida: number;
     quantidade_recebida: number;
@@ -38,6 +39,24 @@ interface Pedido {
 }
 
 type ItemReception = 'recebido' | 'parcial' | 'nao_recebido';
+
+interface Remanejamento {
+    id: string;
+    pedido_item_origem_id: string;
+    pedido_destino_id: string;
+    item_id: string;
+    quantidade: number;
+    // Joined data
+    pedido_origem?: { numero_pedido: string; unidades?: { nome: string } };
+    pedido_destino?: { numero_pedido: string; unidades?: { nome: string } };
+}
+
+interface PedidoSearchResult {
+    id: string;
+    numero_pedido: string;
+    status: string;
+    unidades?: { nome: string };
+}
 
 const STEPS = ['Pendente', 'Realizado', 'Recebido'];
 
@@ -106,6 +125,17 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     const [itemQtyEdit,   setItemQtyEdit]   = useState<Record<string, number>>({});
     const [itemAtendidaEdit, setItemAtendidaEdit] = useState<Record<string, number>>({});
 
+    // Remanejamentos
+    const [remanejamentosOut, setRemanejamentosOut] = useState<Remanejamento[]>([]); // from this order
+    const [remanejamentosIn,  setRemanejamentosIn]  = useState<Remanejamento[]>([]); // into this order
+    const [remanejModalItem,  setRemanejModalItem]  = useState<PedidoItem | null>(null);
+    const [remanejQty,        setRemanejQty]        = useState(0);
+    const [remanejSearch,     setRemanejSearch]     = useState('');
+    const [remanejResults,    setRemanejResults]    = useState<PedidoSearchResult[]>([]);
+    const [remanejSelected,   setRemanejSelected]   = useState<PedidoSearchResult | null>(null);
+    const [remanejSaving,     setRemanejSaving]     = useState(false);
+    const [remanejSearching,  setRemanejSearching]  = useState(false);
+
     const fileRef = useRef<HTMLInputElement>(null);
     const role    = currentUser?.role ?? 'solicitante';
 
@@ -122,9 +152,35 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
             setPedido(supabasePedido as Pedido);
             const { data: supabaseItems } = await supabase
                 .from('pedidos_itens')
-                .select('id, quantidade, quantidade_atendida, quantidade_recebida, observacao, itens(codigo, referencia, nome, tipo)')
+                .select('id, item_id, quantidade, quantidade_atendida, quantidade_recebida, observacao, itens(codigo, referencia, nome, tipo)')
                 .eq('pedido_id', id);
             setItems((supabaseItems as unknown as PedidoItem[]) || []);
+
+            // Load remanejamentos OUT (from this order's items)
+            const itemIds = (supabaseItems as any[])?.map((i: any) => i.id) || [];
+            if (itemIds.length > 0) {
+                const { data: remOut } = await supabase
+                    .from('remanejamentos')
+                    .select('*, pedidos!remanejamentos_pedido_destino_id_fkey(numero_pedido, unidades(nome))')
+                    .in('pedido_item_origem_id', itemIds);
+                setRemanejamentosOut((remOut || []).map((r: any) => ({
+                    ...r,
+                    pedido_destino: r.pedidos,
+                })));
+            } else {
+                setRemanejamentosOut([]);
+            }
+
+            // Load remanejamentos IN (into this order)
+            const { data: remIn } = await supabase
+                .from('remanejamentos')
+                .select('*, pedidos_itens!remanejamentos_pedido_item_origem_id_fkey(pedido_id, pedidos(numero_pedido, unidades(nome)))')
+                .eq('pedido_destino_id', id);
+            setRemanejamentosIn((remIn || []).map((r: any) => ({
+                ...r,
+                pedido_origem: r.pedidos_itens?.pedidos,
+            })));
+
             setLoading(false);
             return;
         }
@@ -137,7 +193,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
             setItems(mockI.map(pi => {
                 const itemRef = mockItens.find(i => i.id === pi.item_id);
                 return {
-                    id: pi.id, quantidade: pi.quantidade,
+                    id: pi.id, item_id: pi.item_id, quantidade: pi.quantidade,
                     quantidade_atendida: pi.quantidade_atendida,
                     quantidade_recebida: pi.quantidade_recebida,
                     observacao: pi.observacao,
@@ -283,6 +339,144 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     async function handleChangeStatus(newStatus: string) {
         await supabase.from('pedidos').update({ status: newStatus }).eq('id', id);
         await loadData();
+    }
+
+    // ── Remanejamento ──────────────────────────────────────────────────────────
+
+    function openRemanejModal(item: PedidoItem) {
+        setRemanejModalItem(item);
+        setRemanejQty(item.quantidade);
+        setRemanejSearch('');
+        setRemanejResults([]);
+        setRemanejSelected(null);
+    }
+
+    function closeRemanejModal() {
+        setRemanejModalItem(null);
+    }
+
+    async function searchPedidos(query: string) {
+        setRemanejSearch(query);
+        if (query.length < 2) { setRemanejResults([]); return; }
+        setRemanejSearching(true);
+        try {
+            // Search by order number
+            const { data: byNumber } = await supabase
+                .from('pedidos')
+                .select('id, numero_pedido, status, unidades(nome)')
+                .neq('id', id)
+                .ilike('numero_pedido', `%${query}%`)
+                .order('created_at', { ascending: false })
+                .limit(10);
+
+            // Search by unit name (get matching unit ids first)
+            const { data: units } = await supabase
+                .from('unidades')
+                .select('id')
+                .ilike('nome', `%${query}%`);
+            const unitIds = (units || []).map(u => u.id);
+
+            let byUnit: any[] = [];
+            if (unitIds.length > 0) {
+                const { data } = await supabase
+                    .from('pedidos')
+                    .select('id, numero_pedido, status, unidades(nome)')
+                    .neq('id', id)
+                    .in('unidade_id', unitIds)
+                    .order('created_at', { ascending: false })
+                    .limit(10);
+                byUnit = data || [];
+            }
+
+            // Merge and deduplicate
+            const merged = new Map<string, PedidoSearchResult>();
+            for (const p of [...(byNumber || []), ...byUnit]) {
+                if (!merged.has(p.id)) merged.set(p.id, p as unknown as PedidoSearchResult);
+            }
+            setRemanejResults(Array.from(merged.values()).slice(0, 10));
+        } catch {
+            setRemanejResults([]);
+        } finally {
+            setRemanejSearching(false);
+        }
+    }
+
+    async function handleSaveRemanejamento() {
+        if (!remanejModalItem || !remanejSelected || remanejQty <= 0) return;
+        setRemanejSaving(true);
+        try {
+            // Get the item_id from the pedido_item
+            const { data: piData } = await supabase
+                .from('pedidos_itens')
+                .select('item_id')
+                .eq('id', remanejModalItem.id)
+                .single();
+
+            if (!piData) throw new Error('Item não encontrado');
+
+            // Create remanejamento record
+            await supabase.from('remanejamentos').insert({
+                pedido_item_origem_id: remanejModalItem.id,
+                pedido_destino_id: remanejSelected.id,
+                item_id: piData.item_id,
+                quantidade: remanejQty,
+            });
+
+            // Check if destination order already has this item
+            const { data: destItem } = await supabase
+                .from('pedidos_itens')
+                .select('id, quantidade')
+                .eq('pedido_id', remanejSelected.id)
+                .eq('item_id', piData.item_id)
+                .maybeSingle();
+
+            if (destItem) {
+                // Add qty to existing item in destination order
+                await supabase.from('pedidos_itens')
+                    .update({ quantidade: destItem.quantidade + remanejQty })
+                    .eq('id', destItem.id);
+            } else {
+                // Create new item in destination order
+                await supabase.from('pedidos_itens').insert({
+                    pedido_id: remanejSelected.id,
+                    item_id: piData.item_id,
+                    quantidade: remanejQty,
+                });
+            }
+
+            closeRemanejModal();
+            await loadData();
+        } catch (err) {
+            console.error('Erro ao remanejar:', err);
+        } finally {
+            setRemanejSaving(false);
+        }
+    }
+
+    async function handleDeleteRemanejamento(remId: string, remQty: number, destPedidoId: string, itemId: string) {
+        try {
+            // Remove qty from destination order's item
+            const { data: destItem } = await supabase
+                .from('pedidos_itens')
+                .select('id, quantidade')
+                .eq('pedido_id', destPedidoId)
+                .eq('item_id', itemId)
+                .maybeSingle();
+
+            if (destItem) {
+                const newQty = destItem.quantidade - remQty;
+                if (newQty <= 0) {
+                    await supabase.from('pedidos_itens').delete().eq('id', destItem.id);
+                } else {
+                    await supabase.from('pedidos_itens').update({ quantidade: newQty }).eq('id', destItem.id);
+                }
+            }
+
+            await supabase.from('remanejamentos').delete().eq('id', remId);
+            await loadData();
+        } catch (err) {
+            console.error('Erro ao remover remanejamento:', err);
+        }
     }
 
     // ── CSV export ────────────────────────────────────────────────────────────
@@ -610,6 +804,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Código</th>
                                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Tipo</th>
                                 <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Qtd Pedida</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Remanejamento</th>
                                 {status !== 'Pendente' && (
                                     <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Qtd Atendida</th>
                                 )}
@@ -661,6 +856,50 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                         <td className="px-4 py-3.5 text-slate-500 font-mono">{item.itens.codigo}</td>
                                         <td className="px-4 py-3.5 text-slate-500">{item.itens.tipo || '—'}</td>
                                         <td className="px-4 py-3.5 text-right font-semibold text-slate-900">{item.quantidade}</td>
+
+                                        {/* Remanejamento info */}
+                                        <td className="px-4 py-3.5">
+                                            <div className="flex flex-col gap-1">
+                                                {/* Outgoing remanejamentos for this item */}
+                                                {remanejamentosOut
+                                                    .filter(r => r.pedido_item_origem_id === item.id)
+                                                    .map(r => (
+                                                        <div key={r.id} className="flex items-center gap-1.5">
+                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-purple-100 text-purple-700">
+                                                                {r.quantidade} un. → #{r.pedido_destino?.numero_pedido} ({r.pedido_destino?.unidades?.nome})
+                                                            </span>
+                                                            {canComprador && (
+                                                                <button
+                                                                    onClick={() => handleDeleteRemanejamento(r.id, r.quantidade, r.pedido_destino_id, r.item_id)}
+                                                                    className="text-red-400 hover:text-red-600 transition-colors"
+                                                                    title="Remover remanejamento"
+                                                                >
+                                                                    <X className="w-3 h-3" />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    ))
+                                                }
+                                                {/* Incoming remanejamentos for this item */}
+                                                {remanejamentosIn
+                                                    .filter(r => r.item_id === item.item_id)
+                                                    .map(r => (
+                                                        <span key={r.id} className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-indigo-100 text-indigo-700">
+                                                            {r.quantidade} un. ← #{r.pedido_origem?.numero_pedido} ({r.pedido_origem?.unidades?.nome})
+                                                        </span>
+                                                    ))
+                                                }
+                                                {/* Remanejar button for comprador */}
+                                                {canComprador && status === 'Pendente' && (
+                                                    <button
+                                                        onClick={() => openRemanejModal(item)}
+                                                        className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium text-purple-600 border border-purple-200 rounded-md hover:bg-purple-50 transition-colors w-fit"
+                                                    >
+                                                        <ArrowRightLeft className="w-3 h-3" /> Remanejar
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </td>
 
                                         {status !== 'Pendente' && (
                                             <td className={`px-4 py-3.5 text-right font-semibold ${situacao === 'atendido' ? 'text-green-700' : situacao === 'parcial' ? 'text-yellow-700' : 'text-red-600'}`}>
@@ -737,6 +976,110 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                         {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         {saving ? 'Salvando...' : 'Confirmar Recebimento'}
                     </button>
+                </div>
+            )}
+
+            {/* ── Modal Remanejamento ──────────────────────────────────────── */}
+            {remanejModalItem && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-800">Remanejar Item</h3>
+                                <p className="text-xs text-slate-500 mt-0.5">{remanejModalItem.itens.nome}</p>
+                            </div>
+                            <button onClick={closeRemanejModal} className="text-slate-400 hover:text-slate-600">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                                    Quantidade a remanejar (disponível: {remanejModalItem.quantidade})
+                                </label>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    max={remanejModalItem.quantidade}
+                                    value={remanejQty}
+                                    onChange={e => setRemanejQty(parseInt(e.target.value) || 0)}
+                                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#001A72]"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                                    Pedido destino (busque por n. pedido ou unidade)
+                                </label>
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="Digite para buscar..."
+                                        value={remanejSearch}
+                                        onChange={e => searchPedidos(e.target.value)}
+                                        className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#001A72]"
+                                    />
+                                    {remanejSearching && (
+                                        <RefreshCw className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 animate-spin" />
+                                    )}
+                                </div>
+
+                                {remanejResults.length > 0 && !remanejSelected && (
+                                    <div className="mt-2 border border-slate-200 rounded-lg max-h-40 overflow-y-auto divide-y divide-slate-100">
+                                        {remanejResults.map(p => (
+                                            <button
+                                                key={p.id}
+                                                onClick={() => { setRemanejSelected(p); setRemanejSearch(`#${p.numero_pedido} - ${p.unidades?.nome || 'N/I'}`); }}
+                                                className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 transition-colors flex items-center justify-between"
+                                            >
+                                                <span>
+                                                    <strong className="text-slate-800">#{p.numero_pedido}</strong>
+                                                    <span className="text-slate-500 ml-2">{p.unidades?.nome || 'N/I'}</span>
+                                                </span>
+                                                <StatusBadge status={p.status} />
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {remanejSelected && (
+                                    <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-purple-50 border border-purple-200 rounded-lg">
+                                        <ArrowRightLeft className="w-4 h-4 text-purple-600 shrink-0" />
+                                        <span className="text-sm font-medium text-purple-800">
+                                            #{remanejSelected.numero_pedido} — {remanejSelected.unidades?.nome || 'N/I'}
+                                        </span>
+                                        <button onClick={() => { setRemanejSelected(null); setRemanejSearch(''); }} className="ml-auto text-purple-400 hover:text-purple-600">
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {remanejSelected && remanejQty > 0 && (
+                                <div className="bg-slate-50 rounded-lg px-4 py-3 text-xs text-slate-600 space-y-1">
+                                    <p><strong>{remanejQty}</strong> un. de <strong>{remanejModalItem.itens.nome}</strong></p>
+                                    <p>Serão adicionadas ao pedido <strong>#{remanejSelected.numero_pedido}</strong> ({remanejSelected.unidades?.nome})</p>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-2">
+                            <button onClick={closeRemanejModal}
+                                className="px-4 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleSaveRemanejamento}
+                                disabled={remanejSaving || !remanejSelected || remanejQty <= 0}
+                                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {remanejSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ArrowRightLeft className="w-4 h-4" />}
+                                {remanejSaving ? 'Salvando...' : 'Confirmar Remanejamento'}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 
