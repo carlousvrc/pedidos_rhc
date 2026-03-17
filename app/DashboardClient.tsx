@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { FileText, Clock, CheckCircle, Plus, RefreshCw, ShoppingCart, Search, X, Trash2 } from 'lucide-react';
+import { FileText, Clock, CheckCircle, Plus, RefreshCw, ShoppingCart, Search, X, Trash2, ArrowRightLeft, History, BarChart3, Package, Users, FileSpreadsheet } from 'lucide-react';
 import type { Usuario } from '@/lib/auth';
 import ConfirmModal from './components/ConfirmModal';
 
@@ -243,6 +243,73 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                         <div className="h-1.5 rounded-full bg-green-500 transition-all" style={{ width: totalPedidos ? `${(recebidos / totalPedidos) * 100}%` : '0%' }} />
                     </div>
                 </div>
+            </div>
+
+            {/* Quick Access Modules */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                {canCreateOrder && (
+                    <Link href="/dashboard/pedidos/novo" className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
+                        <div className="p-2.5 bg-blue-50 text-[#001A72] rounded-lg w-fit group-hover:bg-[#001A72] group-hover:text-white transition-colors">
+                            <Plus className="w-5 h-5" />
+                        </div>
+                        <p className="text-sm font-semibold text-slate-800 mt-3">Novo Pedido</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Criar solicitação</p>
+                    </Link>
+                )}
+                {currentUser?.permissoes?.modulos?.historico !== false && (
+                    <Link href="/dashboard/historico" className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
+                        <div className="p-2.5 bg-slate-50 text-slate-600 rounded-lg w-fit group-hover:bg-[#001A72] group-hover:text-white transition-colors">
+                            <History className="w-5 h-5" />
+                        </div>
+                        <p className="text-sm font-semibold text-slate-800 mt-3">Histórico</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Pedidos anteriores</p>
+                    </Link>
+                )}
+                {currentUser?.permissoes?.modulos?.transferencias !== false && (
+                    <Link href="/dashboard/transferencias" className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-purple-300 hover:shadow-md transition-all group">
+                        <div className="p-2.5 bg-purple-50 text-purple-600 rounded-lg w-fit group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                            <ArrowRightLeft className="w-5 h-5" />
+                        </div>
+                        <p className="text-sm font-semibold text-slate-800 mt-3">Transferências</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Remanejamentos</p>
+                    </Link>
+                )}
+                {currentUser?.permissoes?.modulos?.relatorios && (
+                    <Link href="/dashboard/relatorios" className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
+                        <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-lg w-fit group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                            <BarChart3 className="w-5 h-5" />
+                        </div>
+                        <p className="text-sm font-semibold text-slate-800 mt-3">Relatórios</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Dados e análises</p>
+                    </Link>
+                )}
+                {currentUser?.permissoes?.modulos?.bionexo && (
+                    <Link href="/dashboard/bionexo" className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
+                        <div className="p-2.5 bg-sky-50 text-sky-600 rounded-lg w-fit group-hover:bg-sky-600 group-hover:text-white transition-colors">
+                            <FileSpreadsheet className="w-5 h-5" />
+                        </div>
+                        <p className="text-sm font-semibold text-slate-800 mt-3">Bionexo</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Importar cotações</p>
+                    </Link>
+                )}
+                {currentUser?.permissoes?.modulos?.itens && (
+                    <Link href="/dashboard/itens" className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
+                        <div className="p-2.5 bg-orange-50 text-orange-600 rounded-lg w-fit group-hover:bg-orange-600 group-hover:text-white transition-colors">
+                            <Package className="w-5 h-5" />
+                        </div>
+                        <p className="text-sm font-semibold text-slate-800 mt-3">Itens</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Catálogo de produtos</p>
+                    </Link>
+                )}
+                {currentUser?.permissoes?.modulos?.usuarios && (
+                    <Link href="/dashboard/usuarios" className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
+                        <div className="p-2.5 bg-violet-50 text-violet-600 rounded-lg w-fit group-hover:bg-violet-600 group-hover:text-white transition-colors">
+                            <Users className="w-5 h-5" />
+                        </div>
+                        <p className="text-sm font-semibold text-slate-800 mt-3">Usuários</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Gerenciar acessos</p>
+                    </Link>
+                )}
             </div>
 
             {/* Orders Table */}
