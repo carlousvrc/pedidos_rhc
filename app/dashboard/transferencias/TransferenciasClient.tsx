@@ -14,14 +14,15 @@ interface TransferenciaItem {
     id: string;
     quantidade: number;
     item_id: string;
-    unidade_destino_id: string;
-    unidade_destino_nome: string;
     created_at: string;
     item_nome: string;
     item_codigo: string;
     origem_unidade_nome: string;
     origem_pedido_numero: string;
     origem_pedido_id: string;
+    destino_unidade_nome: string;
+    destino_pedido_numero: string;
+    destino_pedido_id: string;
 }
 
 export default function TransferenciasClient({ currentUser }: TransferenciasClientProps) {
@@ -37,93 +38,74 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
 
         const unidadeId = currentUser.unidade_id;
         const role = currentUser.role;
-
-        // Admin/comprador: show all. Solicitante: only their unit
         const showAll = role === 'admin' || role === 'comprador';
 
-        let rems: any[] = [];
+        // Fetch all remanejamentos
+        const { data: rems } = await supabase
+            .from('remanejamentos')
+            .select('*')
+            .order('created_at', { ascending: false });
 
-        if (showAll) {
-            const { data, error: err } = await supabase
-                .from('remanejamentos')
-                .select('*')
-                .order('created_at', { ascending: false });
-            if (err) console.log('remanejamentos query error:', err);
-            rems = data || [];
-        } else if (unidadeId) {
-            // Solicitante: show transfers TO their unit
-            const { data, error: err } = await supabase
-                .from('remanejamentos')
-                .select('*')
-                .eq('unidade_destino_id', unidadeId)
-                .order('created_at', { ascending: false });
-            if (err) console.log('remanejamentos query error:', err);
-            rems = data || [];
-        }
-
-        if (rems.length === 0) {
+        if (!rems || rems.length === 0) {
             setTransferencias([]);
             setLoading(false);
             return;
         }
 
-        // Enrich with item, origin pedido, and unit names
+        // Enrich each remanejamento
         const enriched: TransferenciaItem[] = [];
         for (const r of rems) {
-            // Get item info
+            // Item info
             const { data: item } = await supabase
-                .from('itens')
-                .select('nome, codigo')
-                .eq('id', r.item_id)
-                .single();
+                .from('itens').select('nome, codigo').eq('id', r.item_id).single();
 
-            // Get destination unit name
-            const { data: unidadeDest } = await supabase
-                .from('unidades')
-                .select('nome')
-                .eq('id', r.unidade_destino_id)
-                .single();
-
-            // Get origin pedido info via pedidos_itens
+            // Origin pedido via pedidos_itens
             const { data: pi } = await supabase
-                .from('pedidos_itens')
-                .select('pedido_id')
-                .eq('id', r.pedido_item_origem_id)
-                .single();
+                .from('pedidos_itens').select('pedido_id').eq('id', r.pedido_item_origem_id).single();
 
-            let origemUnidade = '—';
-            let origemPedidoNumero = '—';
-            let origemPedidoId = '';
+            let origemUnidade = '—', origemPedNum = '—', origemPedId = '', origemUnidadeId = '';
             if (pi) {
                 const { data: ped } = await supabase
-                    .from('pedidos')
-                    .select('id, numero_pedido, unidade_id')
-                    .eq('id', pi.pedido_id)
-                    .single();
+                    .from('pedidos').select('id, numero_pedido, unidade_id').eq('id', pi.pedido_id).single();
                 if (ped) {
-                    origemPedidoNumero = ped.numero_pedido;
-                    origemPedidoId = ped.id;
-                    const { data: uOrig } = await supabase
-                        .from('unidades')
-                        .select('nome')
-                        .eq('id', ped.unidade_id)
-                        .single();
-                    if (uOrig) origemUnidade = uOrig.nome;
+                    origemPedNum = ped.numero_pedido;
+                    origemPedId = ped.id;
+                    origemUnidadeId = ped.unidade_id;
+                    const { data: u } = await supabase.from('unidades').select('nome').eq('id', ped.unidade_id).single();
+                    if (u) origemUnidade = u.nome;
                 }
+            }
+
+            // Destination pedido
+            const { data: destPed } = await supabase
+                .from('pedidos').select('id, numero_pedido, unidade_id').eq('id', r.pedido_destino_id).single();
+            let destinoUnidade = '—', destinoPedNum = '—', destinoPedId = '', destinoUnidadeId = '';
+            if (destPed) {
+                destinoPedNum = destPed.numero_pedido;
+                destinoPedId = destPed.id;
+                destinoUnidadeId = destPed.unidade_id;
+                const { data: u } = await supabase.from('unidades').select('nome').eq('id', destPed.unidade_id).single();
+                if (u) destinoUnidade = u.nome;
+            }
+
+            // Filter: solicitante sees only their unit (origin or destination)
+            if (!showAll && unidadeId) {
+                if (origemUnidadeId !== unidadeId && destinoUnidadeId !== unidadeId) continue;
             }
 
             enriched.push({
                 id: r.id,
                 quantidade: r.quantidade,
                 item_id: r.item_id,
-                unidade_destino_id: r.unidade_destino_id,
-                unidade_destino_nome: unidadeDest?.nome || '—',
                 created_at: r.created_at,
                 item_nome: item?.nome || '—',
                 item_codigo: item?.codigo || '—',
                 origem_unidade_nome: origemUnidade,
-                origem_pedido_numero: origemPedidoNumero,
-                origem_pedido_id: origemPedidoId,
+                origem_pedido_numero: origemPedNum,
+                origem_pedido_id: origemPedId,
+                destino_unidade_nome: destinoUnidade,
+                destino_pedido_numero: destinoPedNum,
+                destino_pedido_id: destinoPedId,
             });
         }
 
@@ -141,7 +123,6 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
 
     return (
         <div className="max-w-[1200px] mx-auto p-4 sm:p-6 space-y-6">
-            {/* Header */}
             <div>
                 <div className="flex items-center text-xs text-slate-500 gap-2 mb-4">
                     <Link href="/" className="hover:text-[#001A72] transition-colors">Dashboard</Link>
@@ -149,27 +130,21 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
                     <span className="text-slate-800 font-medium">Transferências</span>
                 </div>
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
-                        <ArrowRightLeft className="w-5 h-5 text-amber-700" />
+                    <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
+                        <ArrowRightLeft className="w-5 h-5 text-purple-700" />
                     </div>
                     <div>
                         <h1 className="text-2xl font-bold text-slate-900">Transferências</h1>
-                        <p className="text-sm text-slate-500">
-                            {currentUser.unidade_id
-                                ? 'Itens que serão recebidos de outras unidades'
-                                : 'Todos os remanejamentos entre unidades'
-                            }
-                        </p>
+                        <p className="text-sm text-slate-500">Itens remanejados entre pedidos de diferentes unidades</p>
                     </div>
                 </div>
             </div>
 
-            {/* Content */}
             {transferencias.length === 0 ? (
                 <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-12 text-center">
                     <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                    <p className="text-slate-500 font-medium">Nenhuma transferência pendente</p>
-                    <p className="text-xs text-slate-400 mt-1">Quando itens forem remanejados para sua unidade, aparecerão aqui.</p>
+                    <p className="text-slate-500 font-medium">Nenhuma transferência</p>
+                    <p className="text-xs text-slate-400 mt-1">Quando itens forem remanejados entre pedidos, aparecerão aqui.</p>
                 </div>
             ) : (
                 <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
@@ -179,16 +154,15 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
                                 <tr>
                                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Item</th>
                                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Código</th>
-                                    <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Quantidade</th>
-                                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Origem</th>
-                                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Destino</th>
-                                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Pedido</th>
+                                    <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Qtd</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">De (Origem)</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Para (Destino)</th>
                                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Data</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-slate-100">
                                 {transferencias.map(t => (
-                                    <tr key={t.id} className="hover:bg-amber-50/50 transition-colors">
+                                    <tr key={t.id} className="hover:bg-purple-50/40 transition-colors">
                                         <td className="px-4 py-3.5 text-slate-800 font-medium max-w-[250px] truncate">
                                             {t.item_nome}
                                         </td>
@@ -196,31 +170,27 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
                                             {t.item_codigo}
                                         </td>
                                         <td className="px-4 py-3.5 text-right">
-                                            <span className="inline-flex items-center gap-1 px-2.5 py-1 text-sm font-bold rounded-lg bg-amber-100 text-amber-800">
+                                            <span className="inline-flex items-center gap-1 px-2.5 py-1 text-sm font-bold rounded-lg bg-purple-100 text-purple-800">
                                                 {t.quantidade} un.
                                             </span>
                                         </td>
                                         <td className="px-4 py-3.5">
-                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-purple-100 text-purple-700">
-                                                {t.origem_unidade_nome}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3.5">
-                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-amber-100 text-amber-800">
-                                                {t.unidade_destino_nome}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3.5">
-                                            {t.origem_pedido_id ? (
-                                                <Link
-                                                    href={`/dashboard/pedidos/${t.origem_pedido_id}`}
-                                                    className="text-[#001A72] hover:underline font-medium text-xs"
-                                                >
-                                                    #{t.origem_pedido_numero}
+                                            <div className="flex flex-col gap-0.5">
+                                                <span className="text-xs font-semibold text-slate-700">{t.origem_unidade_nome}</span>
+                                                <Link href={`/dashboard/pedidos/${t.origem_pedido_id}`}
+                                                    className="text-[#001A72] hover:underline text-[11px]">
+                                                    Pedido #{t.origem_pedido_numero}
                                                 </Link>
-                                            ) : (
-                                                <span className="text-slate-400">—</span>
-                                            )}
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-3.5">
+                                            <div className="flex flex-col gap-0.5">
+                                                <span className="text-xs font-semibold text-slate-700">{t.destino_unidade_nome}</span>
+                                                <Link href={`/dashboard/pedidos/${t.destino_pedido_id}`}
+                                                    className="text-[#001A72] hover:underline text-[11px]">
+                                                    Pedido #{t.destino_pedido_numero}
+                                                </Link>
+                                            </div>
                                         </td>
                                         <td className="px-4 py-3.5 text-xs text-slate-500">
                                             {new Date(t.created_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
