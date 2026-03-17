@@ -7,8 +7,9 @@ import { mockPedidos, mockPedidosItens, mockItens } from '@/lib/mockData';
 import type { Usuario } from '@/lib/auth';
 import {
     ChevronRight, Download, Save, Upload, RefreshCw,
-    CheckCircle2, Pencil, FileText, X, ArrowRightLeft, Search,
+    CheckCircle2, Pencil, FileText, X, ArrowRightLeft,
 } from 'lucide-react';
+import 'tom-select/dist/css/tom-select.css';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -129,12 +130,12 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     const [remanejamentosOut, setRemanejamentosOut] = useState<Remanejamento[]>([]); // from this order
     const [remanejamentosIn,  setRemanejamentosIn]  = useState<Remanejamento[]>([]); // into this order
     const [remanejModalItem,  setRemanejModalItem]  = useState<PedidoItem | null>(null);
-    const [remanejQty,        setRemanejQty]        = useState(0);
-    const [remanejSearch,     setRemanejSearch]     = useState('');
-    const [remanejResults,    setRemanejResults]    = useState<PedidoSearchResult[]>([]);
+    const [remanejQty,        setRemanejQty]        = useState('');
     const [remanejSelected,   setRemanejSelected]   = useState<PedidoSearchResult | null>(null);
     const [remanejSaving,     setRemanejSaving]     = useState(false);
-    const [remanejSearching,  setRemanejSearching]  = useState(false);
+    const [remanejPedidos,    setRemanejPedidos]    = useState<PedidoSearchResult[]>([]);
+    const remanejSelectElRef  = useRef<HTMLSelectElement>(null);
+    const remanejTomRef       = useRef<any>(null);
 
     const fileRef = useRef<HTMLInputElement>(null);
     const role    = currentUser?.role ?? 'solicitante';
@@ -343,73 +344,91 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
 
     // ── Remanejamento ──────────────────────────────────────────────────────────
 
-    function openRemanejModal(item: PedidoItem) {
+    async function openRemanejModal(item: PedidoItem) {
         setRemanejModalItem(item);
-        setRemanejQty(item.quantidade);
-        setRemanejSearch('');
-        setRemanejResults([]);
+        setRemanejQty(String(item.quantidade));
         setRemanejSelected(null);
+
+        // Load all pedidos (except current) for TomSelect
+        const { data } = await supabase
+            .from('pedidos')
+            .select('id, numero_pedido, status, unidades(nome)')
+            .neq('id', id)
+            .order('created_at', { ascending: false });
+        setRemanejPedidos((data as unknown as PedidoSearchResult[]) || []);
     }
 
     function closeRemanejModal() {
+        if (remanejTomRef.current) {
+            remanejTomRef.current.destroy();
+            remanejTomRef.current = null;
+        }
         setRemanejModalItem(null);
     }
 
-    async function searchPedidos(query: string) {
-        setRemanejSearch(query);
-        if (query.length < 2) { setRemanejResults([]); return; }
-        setRemanejSearching(true);
-        try {
-            // Search by order number
-            const { data: byNumber } = await supabase
-                .from('pedidos')
-                .select('id, numero_pedido, status, unidades(nome)')
-                .neq('id', id)
-                .ilike('numero_pedido', `%${query}%`)
-                .order('created_at', { ascending: false })
-                .limit(10);
-
-            // Search by unit name (get matching unit ids first)
-            const { data: units } = await supabase
-                .from('unidades')
-                .select('id')
-                .ilike('nome', `%${query}%`);
-            const unitIds = (units || []).map(u => u.id);
-
-            let byUnit: any[] = [];
-            if (unitIds.length > 0) {
-                const { data } = await supabase
-                    .from('pedidos')
-                    .select('id, numero_pedido, status, unidades(nome)')
-                    .neq('id', id)
-                    .in('unidade_id', unitIds)
-                    .order('created_at', { ascending: false })
-                    .limit(10);
-                byUnit = data || [];
+    // Init TomSelect when modal pedidos are loaded
+    useEffect(() => {
+        if (!remanejModalItem || remanejPedidos.length === 0 || !remanejSelectElRef.current) return;
+        import('tom-select').then(({ default: TomSelect }) => {
+            if (remanejTomRef.current) {
+                remanejTomRef.current.destroy();
+                remanejTomRef.current = null;
             }
-
-            // Merge and deduplicate
-            const merged = new Map<string, PedidoSearchResult>();
-            for (const p of [...(byNumber || []), ...byUnit]) {
-                if (!merged.has(p.id)) merged.set(p.id, p as unknown as PedidoSearchResult);
+            const options = remanejPedidos.map(p => ({
+                value: p.id,
+                text: `#${p.numero_pedido} — ${p.unidades?.nome || 'N/I'}`,
+                numero: p.numero_pedido,
+                unidade: p.unidades?.nome || '',
+                status: p.status,
+            }));
+            remanejTomRef.current = new TomSelect(remanejSelectElRef.current!, {
+                options,
+                valueField: 'value',
+                labelField: 'text',
+                searchField: ['numero', 'unidade', 'text'],
+                placeholder: 'Buscar por nº pedido ou unidade...',
+                maxOptions: 50,
+                maxItems: 1,
+                closeAfterSelect: true,
+                onItemAdd(value: string) {
+                    const found = remanejPedidos.find(p => p.id === value);
+                    if (found) setRemanejSelected(found);
+                },
+                onItemRemove() {
+                    setRemanejSelected(null);
+                },
+                render: {
+                    option(data: any) {
+                        return `<div class="ts-item-option">
+                            <span class="ts-item-name">#${data.numero} — ${data.unidade}</span>
+                            <span class="ts-item-meta">${data.status}</span>
+                        </div>`;
+                    },
+                    item(data: any) {
+                        return `<div>#${data.numero} — ${data.unidade}</div>`;
+                    },
+                },
+            });
+        });
+        return () => {
+            if (remanejTomRef.current) {
+                remanejTomRef.current.destroy();
+                remanejTomRef.current = null;
             }
-            setRemanejResults(Array.from(merged.values()).slice(0, 10));
-        } catch {
-            setRemanejResults([]);
-        } finally {
-            setRemanejSearching(false);
-        }
-    }
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [remanejPedidos, remanejModalItem]);
 
     async function handleSaveRemanejamento() {
-        if (!remanejModalItem || !remanejSelected || remanejQty <= 0) return;
+        const qty = parseInt(remanejQty) || 0;
+        if (!remanejModalItem || !remanejSelected || qty <= 0) return;
         setRemanejSaving(true);
         try {
             await supabase.from('remanejamentos').insert({
                 pedido_item_origem_id: remanejModalItem.id,
                 pedido_destino_id: remanejSelected.id,
                 item_id: remanejModalItem.item_id,
-                quantidade: remanejQty,
+                quantidade: qty,
             });
 
             closeRemanejModal();
@@ -944,6 +963,34 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                             </button>
                         </div>
 
+                        <style>{`
+                            .remanej-ts .ts-control {
+                                border: 1px solid #e2e8f0 !important;
+                                border-radius: 0.5rem !important;
+                                padding: 0.5rem 0.75rem !important;
+                                background: #fff !important;
+                                font-size: 0.875rem !important;
+                                box-shadow: none !important;
+                                min-height: 42px !important;
+                            }
+                            .remanej-ts .ts-control:focus-within {
+                                border-color: #001A72 !important;
+                                box-shadow: 0 0 0 2px rgba(0,26,114,0.15) !important;
+                            }
+                            .remanej-ts .ts-dropdown {
+                                border: 1px solid #e2e8f0 !important;
+                                border-radius: 0.5rem !important;
+                                box-shadow: 0 4px 16px rgba(0,0,0,0.10) !important;
+                                font-size: 0.875rem !important;
+                                margin-top: 4px !important;
+                            }
+                            .remanej-ts .ts-dropdown .option { padding: 0 !important; }
+                            .remanej-ts .ts-dropdown .option.active { background: #f1f5f9 !important; color: inherit !important; }
+                            .remanej-ts .ts-item-option { display: flex; justify-content: space-between; align-items: center; padding: 8px 14px; }
+                            .remanej-ts .ts-item-name { font-weight: 500; color: #1e293b; }
+                            .remanej-ts .ts-item-meta { font-size: 0.75rem; color: #94a3b8; }
+                            .remanej-ts .ts-control input::placeholder { color: #94a3b8; }
+                        `}</style>
                         <div className="p-6 space-y-4">
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">
@@ -954,65 +1001,23 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                     min={1}
                                     max={remanejModalItem.quantidade}
                                     value={remanejQty}
-                                    onChange={e => setRemanejQty(parseInt(e.target.value) || 0)}
+                                    onChange={e => setRemanejQty(e.target.value)}
                                     className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#001A72]"
                                 />
                             </div>
 
-                            <div>
+                            <div className="remanej-ts">
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">
-                                    Unidade que receberá (busque por n. pedido ou unidade)
+                                    Unidade que receberá
                                 </label>
-                                <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                    <input
-                                        type="text"
-                                        placeholder="Digite para buscar..."
-                                        value={remanejSearch}
-                                        onChange={e => searchPedidos(e.target.value)}
-                                        className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#001A72]"
-                                    />
-                                    {remanejSearching && (
-                                        <RefreshCw className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 animate-spin" />
-                                    )}
-                                </div>
-
-                                {remanejResults.length > 0 && !remanejSelected && (
-                                    <div className="mt-2 border border-slate-200 rounded-lg max-h-40 overflow-y-auto divide-y divide-slate-100">
-                                        {remanejResults.map(p => (
-                                            <button
-                                                key={p.id}
-                                                onClick={() => { setRemanejSelected(p); setRemanejSearch(`#${p.numero_pedido} - ${p.unidades?.nome || 'N/I'}`); }}
-                                                className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 transition-colors flex items-center justify-between"
-                                            >
-                                                <span>
-                                                    <strong className="text-slate-800">#{p.numero_pedido}</strong>
-                                                    <span className="text-slate-500 ml-2">{p.unidades?.nome || 'N/I'}</span>
-                                                </span>
-                                                <StatusBadge status={p.status} />
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {remanejSelected && (
-                                    <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-purple-50 border border-purple-200 rounded-lg">
-                                        <ArrowRightLeft className="w-4 h-4 text-purple-600 shrink-0" />
-                                        <span className="text-sm font-medium text-purple-800">
-                                            #{remanejSelected.numero_pedido} — {remanejSelected.unidades?.nome || 'N/I'}
-                                        </span>
-                                        <button onClick={() => { setRemanejSelected(null); setRemanejSearch(''); }} className="ml-auto text-purple-400 hover:text-purple-600">
-                                            <X className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                )}
+                                <select ref={remanejSelectElRef}></select>
                             </div>
 
-                            {remanejSelected && remanejQty > 0 && (
+                            {remanejSelected && (parseInt(remanejQty) || 0) > 0 && (
                                 <div className="bg-amber-50 rounded-lg px-4 py-3 text-xs text-amber-800 space-y-1 border border-amber-200">
-                                    <p><strong>{remanejQty}</strong> un. de <strong>{remanejModalItem.itens.nome}</strong></p>
+                                    <p><strong>{parseInt(remanejQty) || 0}</strong> un. de <strong>{remanejModalItem.itens.nome}</strong></p>
                                     <p>Chegarão junto com o pedido <strong>#{remanejSelected.numero_pedido}</strong> ({remanejSelected.unidades?.nome})</p>
-                                    <p className="text-amber-600">Ao receber, <strong>{remanejSelected.unidades?.nome}</strong> deverá separar {remanejQty} un. para <strong>{pedido?.unidades?.nome}</strong></p>
+                                    <p className="text-amber-600">Ao receber, <strong>{remanejSelected.unidades?.nome}</strong> deverá separar {parseInt(remanejQty) || 0} un. para <strong>{pedido?.unidades?.nome}</strong></p>
                                 </div>
                             )}
                         </div>
@@ -1024,7 +1029,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                             </button>
                             <button
                                 onClick={handleSaveRemanejamento}
-                                disabled={remanejSaving || !remanejSelected || remanejQty <= 0}
+                                disabled={remanejSaving || !remanejSelected || (parseInt(remanejQty) || 0) <= 0}
                                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {remanejSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ArrowRightLeft className="w-4 h-4" />}
