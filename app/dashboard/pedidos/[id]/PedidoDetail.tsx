@@ -37,7 +37,7 @@ interface Pedido {
     usuarios?: { nome: string };
 }
 
-type ItemReception = 'recebido' | 'parcial' | 'nao_recebido' | null;
+type ItemReception = 'recebido' | 'parcial' | 'nao_recebido';
 
 const STEPS = ['Pendente', 'Realizado', 'Recebido'];
 
@@ -102,7 +102,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     const [previewBionexo, setPreviewBionexo] = useState<Array<{ codigo: string; quantidade: number }> | null>(null);
 
     // Solicitante item-level reception
-    const [itemReception, setItemReception] = useState<Record<string, ItemReception>>({});
+    const [itemConfirmed, setItemConfirmed] = useState<Record<string, boolean>>({});
     const [itemQtyEdit,   setItemQtyEdit]   = useState<Record<string, number>>({});
     const [itemAtendidaEdit, setItemAtendidaEdit] = useState<Record<string, number>>({});
 
@@ -161,23 +161,18 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     // Init reception state from DB values when items load
     useEffect(() => {
         if (items.length === 0) return;
-        setItemReception(prev => {
+        setItemConfirmed(prev => {
             const next = { ...prev };
             for (const item of items) {
-                if (next[item.id] !== undefined) continue;
-                if (item.quantidade_recebida >= item.quantidade_atendida && item.quantidade_atendida > 0)
-                    next[item.id] = 'recebido';
-                else if (item.quantidade_recebida > 0)
-                    next[item.id] = 'parcial';
-                else
-                    next[item.id] = null;
+                if (next[item.id] === undefined) next[item.id] = item.quantidade_recebida > 0;
             }
             return next;
         });
         setItemQtyEdit(prev => {
             const next = { ...prev };
             for (const item of items) {
-                if (next[item.id] === undefined) next[item.id] = item.quantidade_recebida;
+                if (next[item.id] === undefined)
+                    next[item.id] = item.quantidade_recebida > 0 ? item.quantidade_recebida : item.quantidade_atendida;
             }
             return next;
         });
@@ -270,13 +265,8 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
         setSaving(true);
         try {
             for (const item of items) {
-                const reception = itemReception[item.id];
                 const atendida = itemAtendidaEdit[item.id] ?? item.quantidade_atendida;
-                const qty = reception === 'recebido'
-                    ? atendida
-                    : reception === 'parcial'
-                    ? (itemQtyEdit[item.id] ?? 0)
-                    : 0;
+                const qty = itemConfirmed[item.id] ? (itemQtyEdit[item.id] ?? 0) : 0;
                 await supabase.from('pedidos_itens')
                     .update({ quantidade_atendida: atendida, quantidade_recebida: qty })
                     .eq('id', item.id);
@@ -316,6 +306,12 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
         return 'nao_atendido';
     }
 
+    function getRecebimentoStatus(recebida: number, atendida: number): ItemReception {
+        if (recebida >= atendida && atendida > 0) return 'recebido';
+        if (recebida > 0) return 'parcial';
+        return 'nao_recebido';
+    }
+
     // ── Render ────────────────────────────────────────────────────────────────
 
     if (loading) {
@@ -334,7 +330,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     const canEdit       = currentUser?.permissoes?.modulos?.usuarios === true;
     const status        = pedido.status;
 
-    const allReceptionSet = items.length > 0 && items.every(i => itemReception[i.id] !== null && itemReception[i.id] !== undefined);
+    const allReceptionSet = items.length > 0 && items.every(i => itemConfirmed[i.id] === true);
 
     return (
         <div className="space-y-6 max-w-[1400px]">
@@ -618,7 +614,11 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                     <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Qtd Atendida</th>
                                 )}
                                 {status === 'Realizado' && canSolicitante && (
-                                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Recebimento</th>
+                                    <>
+                                        <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Qtd Recebida</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Status</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase"></th>
+                                    </>
                                 )}
                                 {status === 'Recebido' && (
                                     <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Qtd Recebida</th>
@@ -628,18 +628,20 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                         <tbody className="bg-white divide-y divide-slate-100">
                             {items.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="px-6 py-10 text-center text-slate-500">Nenhum item encontrado.</td>
+                                    <td colSpan={12} className="px-6 py-10 text-center text-slate-500">Nenhum item encontrado.</td>
                                 </tr>
                             ) : items.map((item, idx) => {
                                 const atendidaVal = (status === 'Realizado' && canSolicitante)
                                     ? (itemAtendidaEdit[item.id] ?? item.quantidade_atendida)
                                     : item.quantidade_atendida;
                                 const situacao  = getSituacao(atendidaVal, item.quantidade);
-                                const reception = itemReception[item.id];
+                                const recebidaVal = itemQtyEdit[item.id] ?? item.quantidade_recebida;
+                                const reception = getRecebimentoStatus(recebidaVal, atendidaVal);
+                                const confirmed = itemConfirmed[item.id] ?? false;
                                 const rowBg = status === 'Realizado'
                                     ? situacao === 'atendido' ? 'bg-green-50/50' : situacao === 'parcial' ? 'bg-yellow-50/60' : 'bg-red-50/50'
                                     : status === 'Recebido'
-                                    ? reception === 'recebido' ? 'bg-green-50/50' : reception === 'parcial' ? 'bg-yellow-50/60' : reception === 'nao_recebido' ? 'bg-red-50/50' : ''
+                                    ? reception === 'recebido' ? 'bg-green-50/50' : reception === 'parcial' ? 'bg-yellow-50/60' : 'bg-red-50/50'
                                     : '';
 
                                 return (
@@ -678,37 +680,32 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
 
                                         {/* Recebimento per item — solicitante, status Realizado */}
                                         {status === 'Realizado' && canSolicitante && (
-                                            <td className="px-4 py-3.5">
-                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                            <>
+                                                <td className="px-4 py-3.5">
+                                                    <input
+                                                        type="number" min={0}
+                                                        value={itemQtyEdit[item.id] ?? 0}
+                                                        onChange={e => {
+                                                            setItemQtyEdit(p => ({ ...p, [item.id]: parseInt(e.target.value) || 0 }));
+                                                            setItemConfirmed(p => ({ ...p, [item.id]: false }));
+                                                        }}
+                                                        className="w-20 border border-slate-200 rounded px-2 py-1 text-xs text-right font-semibold focus:outline-none focus:ring-2 focus:ring-[#001A72]"
+                                                    />
+                                                </td>
+                                                <td className="px-4 py-3.5">
+                                                    {reception === 'recebido'     && <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-green-100 text-green-700"><CheckCircle2 className="w-3 h-3" /> Recebido</span>}
+                                                    {reception === 'parcial'      && <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-yellow-100 text-yellow-700">~ Parcial</span>}
+                                                    {reception === 'nao_recebido' && <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-red-100 text-red-600">✕ Não recebido</span>}
+                                                </td>
+                                                <td className="px-4 py-3.5">
                                                     <button
-                                                        onClick={() => setItemReception(p => ({ ...p, [item.id]: 'recebido' }))}
-                                                        className={`px-2.5 py-1 text-xs font-semibold rounded-md border transition-colors ${reception === 'recebido' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-green-700 border-green-200 hover:bg-green-50'}`}
+                                                        onClick={() => setItemConfirmed(p => ({ ...p, [item.id]: !confirmed }))}
+                                                        className={`px-2.5 py-1 text-xs font-semibold rounded-md border transition-colors ${confirmed ? 'bg-green-600 text-white border-green-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
                                                     >
-                                                        ✓ Recebido
+                                                        {confirmed ? <><CheckCircle2 className="w-3 h-3 inline mr-1" />Confirmado</> : 'Confirmar'}
                                                     </button>
-                                                    <button
-                                                        onClick={() => setItemReception(p => ({ ...p, [item.id]: 'parcial' }))}
-                                                        className={`px-2.5 py-1 text-xs font-semibold rounded-md border transition-colors ${reception === 'parcial' ? 'bg-yellow-500 text-white border-yellow-500' : 'bg-white text-yellow-700 border-yellow-200 hover:bg-yellow-50'}`}
-                                                    >
-                                                        ~ Parcial
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setItemReception(p => ({ ...p, [item.id]: 'nao_recebido' }))}
-                                                        className={`px-2.5 py-1 text-xs font-semibold rounded-md border transition-colors ${reception === 'nao_recebido' ? 'bg-red-500 text-white border-red-500' : 'bg-white text-red-600 border-red-200 hover:bg-red-50'}`}
-                                                    >
-                                                        ✕ Não recebido
-                                                    </button>
-                                                    {reception === 'parcial' && (
-                                                        <input
-                                                            type="number" min={0} max={item.quantidade_atendida}
-                                                            value={itemQtyEdit[item.id] ?? 0}
-                                                            onChange={e => setItemQtyEdit(p => ({ ...p, [item.id]: parseInt(e.target.value) || 0 }))}
-                                                            placeholder="Qtd"
-                                                            className="w-16 border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-[#001A72]"
-                                                        />
-                                                    )}
-                                                </div>
-                                            </td>
+                                                </td>
+                                            </>
                                         )}
 
                                         {/* Qty received — read-only after Recebido */}
@@ -729,7 +726,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
             {canSolicitante && status === 'Realizado' && (
                 <div className="flex items-center justify-between bg-white rounded-xl shadow-sm border border-slate-100 px-6 py-4">
                     {!allReceptionSet && (
-                        <p className="text-xs text-slate-500">Marque o status de recebimento de cada item acima antes de confirmar.</p>
+                        <p className="text-xs text-slate-500">Confirme cada item acima antes de salvar o recebimento.</p>
                     )}
                     {allReceptionSet && <span />}
                     <button
