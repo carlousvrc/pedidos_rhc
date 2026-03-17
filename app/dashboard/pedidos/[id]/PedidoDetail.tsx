@@ -44,19 +44,17 @@ type ItemReception = 'recebido' | 'parcial' | 'nao_recebido';
 interface Remanejamento {
     id: string;
     pedido_item_origem_id: string;
-    pedido_destino_id: string;
+    unidade_destino_id: string;
     item_id: string;
     quantidade: number;
     // Joined data
+    unidade_destino?: { nome: string };
     pedido_origem?: { numero_pedido: string; unidades?: { nome: string } };
-    pedido_destino?: { numero_pedido: string; unidades?: { nome: string } };
 }
 
-interface PedidoSearchResult {
+interface UnidadeOption {
     id: string;
-    numero_pedido: string;
-    status: string;
-    unidades?: { nome: string };
+    nome: string;
 }
 
 const STEPS = ['Pendente', 'Realizado', 'Recebido'];
@@ -131,9 +129,9 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     const [remanejamentosIn,  setRemanejamentosIn]  = useState<Remanejamento[]>([]); // into this order
     const [remanejModalItem,  setRemanejModalItem]  = useState<PedidoItem | null>(null);
     const [remanejQty,        setRemanejQty]        = useState('');
-    const [remanejSelected,   setRemanejSelected]   = useState<PedidoSearchResult | null>(null);
+    const [remanejSelected,   setRemanejSelected]   = useState<UnidadeOption | null>(null);
     const [remanejSaving,     setRemanejSaving]     = useState(false);
-    const [remanejPedidos,    setRemanejPedidos]    = useState<PedidoSearchResult[]>([]);
+    const [remanejUnidades,   setRemanejUnidades]   = useState<UnidadeOption[]>([]);
     const remanejSelectElRef  = useRef<HTMLSelectElement>(null);
     const remanejTomRef       = useRef<any>(null);
 
@@ -162,25 +160,29 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
             if (itemIds.length > 0) {
                 const { data: remOut } = await supabase
                     .from('remanejamentos')
-                    .select('*, pedidos!remanejamentos_pedido_destino_id_fkey(numero_pedido, unidades(nome))')
+                    .select('*, unidades!remanejamentos_unidade_destino_id_fkey(nome)')
                     .in('pedido_item_origem_id', itemIds);
                 setRemanejamentosOut((remOut || []).map((r: any) => ({
                     ...r,
-                    pedido_destino: r.pedidos,
+                    unidade_destino: r.unidades,
                 })));
             } else {
                 setRemanejamentosOut([]);
             }
 
-            // Load remanejamentos IN (into this order)
-            const { data: remIn } = await supabase
-                .from('remanejamentos')
-                .select('*, pedidos_itens!remanejamentos_pedido_item_origem_id_fkey(pedido_id, pedidos(numero_pedido, unidades(nome)))')
-                .eq('pedido_destino_id', id);
-            setRemanejamentosIn((remIn || []).map((r: any) => ({
-                ...r,
-                pedido_origem: r.pedidos_itens?.pedidos,
-            })));
+            // Load remanejamentos IN (items arriving at this order's unit)
+            if (supabasePedido.unidade_id) {
+                const { data: remIn } = await supabase
+                    .from('remanejamentos')
+                    .select('*, pedidos_itens!remanejamentos_pedido_item_origem_id_fkey(pedido_id, pedidos(numero_pedido, unidades(nome)))')
+                    .eq('unidade_destino_id', supabasePedido.unidade_id);
+                setRemanejamentosIn((remIn || []).map((r: any) => ({
+                    ...r,
+                    pedido_origem: r.pedidos_itens?.pedidos,
+                })));
+            } else {
+                setRemanejamentosIn([]);
+            }
 
             setLoading(false);
             return;
@@ -349,13 +351,13 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
         setRemanejQty(String(item.quantidade));
         setRemanejSelected(null);
 
-        // Load all pedidos (except current) for TomSelect
+        // Load all unidades (except current order's unit)
         const { data } = await supabase
-            .from('pedidos')
-            .select('id, numero_pedido, status, unidades(nome)')
-            .neq('id', id)
-            .order('created_at', { ascending: false });
-        setRemanejPedidos((data as unknown as PedidoSearchResult[]) || []);
+            .from('unidades')
+            .select('id, nome')
+            .order('nome');
+        const filtered = (data || []).filter((u: any) => u.id !== pedido?.unidade_id);
+        setRemanejUnidades(filtered as UnidadeOption[]);
     }
 
     function closeRemanejModal() {
@@ -366,32 +368,29 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
         setRemanejModalItem(null);
     }
 
-    // Init TomSelect when modal pedidos are loaded
+    // Init TomSelect when modal unidades are loaded
     useEffect(() => {
-        if (!remanejModalItem || remanejPedidos.length === 0 || !remanejSelectElRef.current) return;
+        if (!remanejModalItem || remanejUnidades.length === 0 || !remanejSelectElRef.current) return;
         import('tom-select').then(({ default: TomSelect }) => {
             if (remanejTomRef.current) {
                 remanejTomRef.current.destroy();
                 remanejTomRef.current = null;
             }
-            const options = remanejPedidos.map(p => ({
-                value: p.id,
-                text: `#${p.numero_pedido} — ${p.unidades?.nome || 'N/I'}`,
-                numero: p.numero_pedido,
-                unidade: p.unidades?.nome || '',
-                status: p.status,
+            const options = remanejUnidades.map(u => ({
+                value: u.id,
+                text: u.nome,
             }));
             remanejTomRef.current = new TomSelect(remanejSelectElRef.current!, {
                 options,
                 valueField: 'value',
                 labelField: 'text',
-                searchField: ['numero', 'unidade', 'text'],
-                placeholder: 'Buscar por nº pedido ou unidade...',
+                searchField: ['text'],
+                placeholder: 'Buscar unidade...',
                 maxOptions: 50,
                 maxItems: 1,
                 closeAfterSelect: true,
                 onItemAdd(value: string) {
-                    const found = remanejPedidos.find(p => p.id === value);
+                    const found = remanejUnidades.find(u => u.id === value);
                     if (found) setRemanejSelected(found);
                 },
                 onItemRemove() {
@@ -399,13 +398,10 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                 },
                 render: {
                     option(data: any) {
-                        return `<div class="ts-item-option">
-                            <span class="ts-item-name">#${data.numero} — ${data.unidade}</span>
-                            <span class="ts-item-meta">${data.status}</span>
-                        </div>`;
+                        return `<div style="padding: 8px 14px; font-weight: 500; color: #1e293b;">${data.text}</div>`;
                     },
                     item(data: any) {
-                        return `<div>#${data.numero} — ${data.unidade}</div>`;
+                        return `<div>${data.text}</div>`;
                     },
                 },
             });
@@ -417,7 +413,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
             }
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [remanejPedidos, remanejModalItem]);
+    }, [remanejUnidades, remanejModalItem]);
 
     async function handleSaveRemanejamento() {
         const qty = parseInt(remanejQty) || 0;
@@ -426,7 +422,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
         try {
             await supabase.from('remanejamentos').insert({
                 pedido_item_origem_id: remanejModalItem.id,
-                pedido_destino_id: remanejSelected.id,
+                unidade_destino_id: remanejSelected.id,
                 item_id: remanejModalItem.item_id,
                 quantidade: qty,
             });
@@ -836,7 +832,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                                     .map(r => (
                                                         <div key={r.id} className="flex items-center gap-1.5">
                                                             <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-purple-100 text-purple-700">
-                                                                {r.quantidade} un. virão via {r.pedido_destino?.unidades?.nome} (#{r.pedido_destino?.numero_pedido})
+                                                                {r.quantidade} un. virão via {r.unidade_destino?.nome}
                                                             </span>
                                                             {canComprador && (
                                                                 <button
@@ -855,7 +851,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                                     .filter(r => r.item_id === item.item_id)
                                                     .map(r => (
                                                         <span key={r.id} className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-amber-100 text-amber-800">
-                                                            Separar {r.quantidade} un. p/ {r.pedido_origem?.unidades?.nome} (#{r.pedido_origem?.numero_pedido})
+                                                            Separar {r.quantidade} un. p/ {r.pedido_origem?.unidades?.nome}
                                                         </span>
                                                     ))
                                                 }
@@ -1016,8 +1012,8 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                             {remanejSelected && (parseInt(remanejQty) || 0) > 0 && (
                                 <div className="bg-amber-50 rounded-lg px-4 py-3 text-xs text-amber-800 space-y-1 border border-amber-200">
                                     <p><strong>{parseInt(remanejQty) || 0}</strong> un. de <strong>{remanejModalItem.itens.nome}</strong></p>
-                                    <p>Chegarão junto com o pedido <strong>#{remanejSelected.numero_pedido}</strong> ({remanejSelected.unidades?.nome})</p>
-                                    <p className="text-amber-600">Ao receber, <strong>{remanejSelected.unidades?.nome}</strong> deverá separar {parseInt(remanejQty) || 0} un. para <strong>{pedido?.unidades?.nome}</strong></p>
+                                    <p>Chegarão via <strong>{remanejSelected.nome}</strong></p>
+                                    <p className="text-amber-600">Ao receber, <strong>{remanejSelected.nome}</strong> deverá separar {parseInt(remanejQty) || 0} un. para <strong>{pedido?.unidades?.nome}</strong></p>
                                 </div>
                             )}
                         </div>
