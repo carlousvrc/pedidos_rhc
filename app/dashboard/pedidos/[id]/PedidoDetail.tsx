@@ -7,7 +7,7 @@ import { mockPedidos, mockPedidosItens, mockItens } from '@/lib/mockData';
 import type { Usuario } from '@/lib/auth';
 import {
     ChevronRight, Download, Save, Upload, RefreshCw,
-    CheckCircle2, Pencil, FileText, X, ArrowRightLeft,
+    CheckCircle2, Pencil, FileText, X, ArrowRightLeft, Clock,
 } from 'lucide-react';
 import 'tom-select/dist/css/tom-select.css';
 
@@ -61,15 +61,16 @@ interface PedidoOption {
     unidade_nome: string;
 }
 
-const STEPS = ['Pendente', 'Realizado', 'Recebido'];
+const STEPS = ['Pendente', 'Em Cotação', 'Realizado', 'Recebido'];
 
 // ── Small Components ───────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: string }) {
     const cls =
-        status === 'Pendente'  ? 'bg-orange-100 text-orange-800' :
-        status === 'Realizado' ? 'bg-blue-100 text-[#001A72]' :
-        status === 'Recebido'  ? 'bg-green-100 text-green-800' :
+        status === 'Pendente'    ? 'bg-orange-100 text-orange-800' :
+        status === 'Em Cotação'  ? 'bg-amber-100 text-amber-800' :
+        status === 'Realizado'   ? 'bg-blue-100 text-[#001A72]' :
+        status === 'Recebido'    ? 'bg-green-100 text-green-800' :
         'bg-slate-100 text-slate-700';
     return (
         <span className={`px-2.5 py-0.5 inline-flex text-[11px] leading-5 font-semibold rounded-full ${cls}`}>
@@ -86,8 +87,9 @@ function StatusStepper({ status }: { status: string }) {
                 const done   = idx < currentIdx;
                 const active = idx === currentIdx;
                 const circleClass = done || active
-                    ? step === 'Pendente'  ? 'bg-orange-500 text-white border-orange-500'
-                    : step === 'Realizado' ? 'bg-[#001A72] text-white border-[#001A72]'
+                    ? step === 'Pendente'    ? 'bg-orange-500 text-white border-orange-500'
+                    : step === 'Em Cotação'  ? 'bg-amber-500 text-white border-amber-500'
+                    : step === 'Realizado'   ? 'bg-[#001A72] text-white border-[#001A72]'
                     : 'bg-green-500 text-white border-green-500'
                     : 'bg-white text-slate-400 border-slate-200';
                 return (
@@ -467,6 +469,11 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                 });
             }
 
+            // Auto-update status to "Em Cotação" if still Pendente
+            if (pedido?.status === 'Pendente') {
+                await supabase.from('pedidos').update({ status: 'Em Cotação' }).eq('id', id);
+            }
+
             closeRemanejModal();
             await loadData();
         } catch (err) {
@@ -504,7 +511,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
 
     // ── CSV export ────────────────────────────────────────────────────────────
 
-    function handleExportCsv() {
+    async function handleExportCsv() {
         if (!pedido) return;
         const csv = items.map(i => `${i.itens.codigo};${i.quantidade}`).join('\n');
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -513,6 +520,12 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
         a.href = url; a.download = `Pedido_${pedido.numero_pedido}.csv`;
         document.body.appendChild(a); a.click();
         document.body.removeChild(a); URL.revokeObjectURL(url);
+
+        // Auto-update status to "Em Cotação" if still Pendente
+        if (pedido.status === 'Pendente') {
+            await supabase.from('pedidos').update({ status: 'Em Cotação' }).eq('id', id);
+            await loadData();
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -606,6 +619,11 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                 <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
                     <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                         <h2 className="text-lg font-bold text-slate-800">Área do Comprador</h2>
+                        {status === 'Em Cotação' && (
+                            <span className="flex items-center gap-1.5 text-xs bg-amber-100 text-amber-700 font-semibold px-2.5 py-1 rounded-full">
+                                <Clock className="w-3.5 h-3.5" /> Em cotação
+                            </span>
+                        )}
                         {status === 'Realizado' && (
                             <span className="flex items-center gap-1.5 text-xs bg-green-100 text-green-700 font-semibold px-2.5 py-1 rounded-full">
                                 <CheckCircle2 className="w-3.5 h-3.5" /> PDF confirmado
@@ -613,7 +631,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                         )}
                     </div>
 
-                    {status === 'Pendente' && (
+                    {(status === 'Pendente' || status === 'Em Cotação') && (
                         <div className="p-6 space-y-6">
                             {/* Steps row */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -968,7 +986,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                                     ))
                                                 }
                                                 {/* Remanejar button for comprador — hide if already remanejado */}
-                                                {canComprador && status === 'Pendente' && remanejamentosOut.filter(r => r.pedido_item_origem_id === item.id).length === 0 && (
+                                                {canComprador && (status === 'Pendente' || status === 'Em Cotação') && remanejamentosOut.filter(r => r.pedido_item_origem_id === item.id).length === 0 && (
                                                     <button
                                                         onClick={() => openRemanejModal(item)}
                                                         className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium text-purple-600 border border-purple-200 rounded-md hover:bg-purple-50 transition-colors w-fit"

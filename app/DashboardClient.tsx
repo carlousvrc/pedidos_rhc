@@ -16,11 +16,12 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const hasRealId = (id?: string | null) => !!id && UUID_RE.test(id);
 
 function getStatusBadge(status: string) {
-    switch (status?.toLowerCase()) {
-        case 'pendente':  return 'bg-orange-100 text-orange-800';
-        case 'realizado': return 'bg-blue-100 text-[#001A72]';
-        case 'recebido':  return 'bg-green-100 text-green-800';
-        default:          return 'bg-slate-100 text-slate-700';
+    switch (status) {
+        case 'Pendente':   return 'bg-orange-100 text-orange-800';
+        case 'Em Cotação': return 'bg-amber-100 text-amber-800';
+        case 'Realizado':  return 'bg-blue-100 text-[#001A72]';
+        case 'Recebido':   return 'bg-green-100 text-green-800';
+        default:           return 'bg-slate-100 text-slate-700';
     }
 }
 
@@ -137,7 +138,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
         return pedidos.filter((p: any) => {
             if (filterNumero && !p.numero_pedido?.includes(filterNumero)) return false;
             if (filterUnidade && p.unidades?.nome !== filterUnidade) return false;
-            if (filterStatus && p.status?.toLowerCase() !== filterStatus.toLowerCase()) return false;
+            if (filterStatus && p.status !== filterStatus) return false;
             if (filterData) {
                 const pedidoDate = new Date(p.created_at).toISOString().slice(0, 10);
                 if (pedidoDate !== filterData) return false;
@@ -148,6 +149,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
 
     const totalPedidos = pedidos.length;
     const pendentes  = pedidos.filter((p: any) => p.status?.toLowerCase() === 'pendente').length;
+    const emCotacao  = pedidos.filter((p: any) => p.status === 'Em Cotação').length;
     const realizados = pedidos.filter((p: any) => p.status?.toLowerCase() === 'realizado').length;
     const recebidos  = pedidos.filter((p: any) => p.status?.toLowerCase() === 'recebido').length;
 
@@ -233,7 +235,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
             </div>
 
             {/* Status Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                 <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
                     <div className="flex items-center justify-between mb-3">
                         <div className="p-2 bg-blue-50 text-[#001A72] rounded-lg">
@@ -241,7 +243,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                         </div>
                         <span className="text-3xl font-bold text-slate-900">{totalPedidos}</span>
                     </div>
-                    <p className="text-sm font-medium text-slate-700">Total de Pedidos</p>
+                    <p className="text-sm font-medium text-slate-700">Total</p>
                     <p className="text-xs text-slate-400 mt-0.5">Todos os registros</p>
                     <div className="mt-3 h-1.5 rounded-full bg-slate-100">
                         <div className="h-1.5 rounded-full bg-[#001A72]" style={{ width: '100%' }} />
@@ -259,6 +261,20 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                     <p className="text-xs text-slate-400 mt-0.5">Aguardando comprador</p>
                     <div className="mt-3 h-1.5 rounded-full bg-slate-100">
                         <div className="h-1.5 rounded-full bg-orange-400 transition-all" style={{ width: totalPedidos ? `${(pendentes / totalPedidos) * 100}%` : '0%' }} />
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="p-2 bg-amber-50 text-amber-600 rounded-lg">
+                            <Search className="w-5 h-5" />
+                        </div>
+                        <span className="text-3xl font-bold text-slate-900">{emCotacao}</span>
+                    </div>
+                    <p className="text-sm font-medium text-slate-700">Em Cotação</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Comprador trabalhando</p>
+                    <div className="mt-3 h-1.5 rounded-full bg-slate-100">
+                        <div className="h-1.5 rounded-full bg-amber-400 transition-all" style={{ width: totalPedidos ? `${(emCotacao / totalPedidos) * 100}%` : '0%' }} />
                     </div>
                 </div>
 
@@ -396,9 +412,10 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                             className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#001A72] focus:bg-white transition-colors"
                         >
                             <option value="">Todos os status</option>
-                            <option value="pendente">Pendente</option>
-                            <option value="realizado">Realizado</option>
-                            <option value="recebido">Recebido</option>
+                            <option value="Pendente">Pendente</option>
+                            <option value="Em Cotação">Em Cotação</option>
+                            <option value="Realizado">Realizado</option>
+                            <option value="Recebido">Recebido</option>
                         </select>
                     </div>
                 </div>
