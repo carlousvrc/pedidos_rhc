@@ -405,44 +405,12 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
         if (!remanejModalItem || !remanejSelected || remanejQty <= 0) return;
         setRemanejSaving(true);
         try {
-            // Get the item_id from the pedido_item
-            const { data: piData } = await supabase
-                .from('pedidos_itens')
-                .select('item_id')
-                .eq('id', remanejModalItem.id)
-                .single();
-
-            if (!piData) throw new Error('Item não encontrado');
-
-            // Create remanejamento record
             await supabase.from('remanejamentos').insert({
                 pedido_item_origem_id: remanejModalItem.id,
                 pedido_destino_id: remanejSelected.id,
-                item_id: piData.item_id,
+                item_id: remanejModalItem.item_id,
                 quantidade: remanejQty,
             });
-
-            // Check if destination order already has this item
-            const { data: destItem } = await supabase
-                .from('pedidos_itens')
-                .select('id, quantidade')
-                .eq('pedido_id', remanejSelected.id)
-                .eq('item_id', piData.item_id)
-                .maybeSingle();
-
-            if (destItem) {
-                // Add qty to existing item in destination order
-                await supabase.from('pedidos_itens')
-                    .update({ quantidade: destItem.quantidade + remanejQty })
-                    .eq('id', destItem.id);
-            } else {
-                // Create new item in destination order
-                await supabase.from('pedidos_itens').insert({
-                    pedido_id: remanejSelected.id,
-                    item_id: piData.item_id,
-                    quantidade: remanejQty,
-                });
-            }
 
             closeRemanejModal();
             await loadData();
@@ -453,25 +421,8 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
         }
     }
 
-    async function handleDeleteRemanejamento(remId: string, remQty: number, destPedidoId: string, itemId: string) {
+    async function handleDeleteRemanejamento(remId: string) {
         try {
-            // Remove qty from destination order's item
-            const { data: destItem } = await supabase
-                .from('pedidos_itens')
-                .select('id, quantidade')
-                .eq('pedido_id', destPedidoId)
-                .eq('item_id', itemId)
-                .maybeSingle();
-
-            if (destItem) {
-                const newQty = destItem.quantidade - remQty;
-                if (newQty <= 0) {
-                    await supabase.from('pedidos_itens').delete().eq('id', destItem.id);
-                } else {
-                    await supabase.from('pedidos_itens').update({ quantidade: newQty }).eq('id', destItem.id);
-                }
-            }
-
             await supabase.from('remanejamentos').delete().eq('id', remId);
             await loadData();
         } catch (err) {
@@ -860,17 +811,17 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                         {/* Remanejamento info */}
                                         <td className="px-4 py-3.5">
                                             <div className="flex flex-col gap-1">
-                                                {/* Outgoing remanejamentos for this item */}
+                                                {/* Outgoing: this item will arrive via another unit */}
                                                 {remanejamentosOut
                                                     .filter(r => r.pedido_item_origem_id === item.id)
                                                     .map(r => (
                                                         <div key={r.id} className="flex items-center gap-1.5">
                                                             <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-purple-100 text-purple-700">
-                                                                {r.quantidade} un. → #{r.pedido_destino?.numero_pedido} ({r.pedido_destino?.unidades?.nome})
+                                                                {r.quantidade} un. virão via {r.pedido_destino?.unidades?.nome} (#{r.pedido_destino?.numero_pedido})
                                                             </span>
                                                             {canComprador && (
                                                                 <button
-                                                                    onClick={() => handleDeleteRemanejamento(r.id, r.quantidade, r.pedido_destino_id, r.item_id)}
+                                                                    onClick={() => handleDeleteRemanejamento(r.id)}
                                                                     className="text-red-400 hover:text-red-600 transition-colors"
                                                                     title="Remover remanejamento"
                                                                 >
@@ -880,12 +831,12 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                                         </div>
                                                     ))
                                                 }
-                                                {/* Incoming remanejamentos for this item */}
+                                                {/* Incoming: when receiving, separate these for another unit */}
                                                 {remanejamentosIn
                                                     .filter(r => r.item_id === item.item_id)
                                                     .map(r => (
-                                                        <span key={r.id} className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-indigo-100 text-indigo-700">
-                                                            {r.quantidade} un. ← #{r.pedido_origem?.numero_pedido} ({r.pedido_origem?.unidades?.nome})
+                                                        <span key={r.id} className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-amber-100 text-amber-800">
+                                                            Separar {r.quantidade} un. p/ {r.pedido_origem?.unidades?.nome} (#{r.pedido_origem?.numero_pedido})
                                                         </span>
                                                     ))
                                                 }
@@ -1010,7 +961,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
 
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">
-                                    Pedido destino (busque por n. pedido ou unidade)
+                                    Unidade que receberá (busque por n. pedido ou unidade)
                                 </label>
                                 <div className="relative">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -1058,9 +1009,10 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                             </div>
 
                             {remanejSelected && remanejQty > 0 && (
-                                <div className="bg-slate-50 rounded-lg px-4 py-3 text-xs text-slate-600 space-y-1">
+                                <div className="bg-amber-50 rounded-lg px-4 py-3 text-xs text-amber-800 space-y-1 border border-amber-200">
                                     <p><strong>{remanejQty}</strong> un. de <strong>{remanejModalItem.itens.nome}</strong></p>
-                                    <p>Serão adicionadas ao pedido <strong>#{remanejSelected.numero_pedido}</strong> ({remanejSelected.unidades?.nome})</p>
+                                    <p>Chegarão junto com o pedido <strong>#{remanejSelected.numero_pedido}</strong> ({remanejSelected.unidades?.nome})</p>
+                                    <p className="text-amber-600">Ao receber, <strong>{remanejSelected.unidades?.nome}</strong> deverá separar {remanejQty} un. para <strong>{pedido?.unidades?.nome}</strong></p>
                                 </div>
                             )}
                         </div>
