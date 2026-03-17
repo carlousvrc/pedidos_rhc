@@ -122,7 +122,6 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     // Solicitante item-level reception
     const [itemConfirmed, setItemConfirmed] = useState<Record<string, boolean>>({});
     const [itemQtyEdit,   setItemQtyEdit]   = useState<Record<string, number>>({});
-    const [itemAtendidaEdit, setItemAtendidaEdit] = useState<Record<string, number>>({});
 
     // Remanejamentos
     const [remanejamentosOut, setRemanejamentosOut] = useState<Remanejamento[]>([]); // from this order
@@ -235,13 +234,6 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
             }
             return next;
         });
-        setItemAtendidaEdit(prev => {
-            const next = { ...prev };
-            for (const item of items) {
-                if (next[item.id] === undefined) next[item.id] = item.quantidade_atendida;
-            }
-            return next;
-        });
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [items]);
 
@@ -324,10 +316,9 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
         setSaving(true);
         try {
             for (const item of items) {
-                const atendida = itemAtendidaEdit[item.id] ?? item.quantidade_atendida;
                 const qty = itemConfirmed[item.id] ? (itemQtyEdit[item.id] ?? 0) : 0;
                 await supabase.from('pedidos_itens')
-                    .update({ quantidade_atendida: atendida, quantidade_recebida: qty })
+                    .update({ quantidade_recebida: qty })
                     .eq('id', item.id);
             }
             await supabase.from('pedidos').update({ status: 'Recebido' }).eq('id', id);
@@ -792,12 +783,9 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                     <td colSpan={12} className="px-6 py-10 text-center text-slate-500">Nenhum item encontrado.</td>
                                 </tr>
                             ) : items.map((item, idx) => {
-                                const atendidaVal = (status === 'Realizado' && canSolicitante)
-                                    ? (itemAtendidaEdit[item.id] ?? item.quantidade_atendida)
-                                    : item.quantidade_atendida;
-                                const situacao  = getSituacao(atendidaVal, item.quantidade);
+                                const situacao  = getSituacao(item.quantidade_atendida, item.quantidade);
                                 const recebidaVal = itemQtyEdit[item.id] ?? item.quantidade_recebida;
-                                const reception = getRecebimentoStatus(recebidaVal, atendidaVal);
+                                const reception = getRecebimentoStatus(recebidaVal, item.quantidade_atendida);
                                 const confirmed = itemConfirmed[item.id] ?? false;
                                 const rowBg = status === 'Realizado'
                                     ? situacao === 'atendido' ? 'bg-green-50/50' : situacao === 'parcial' ? 'bg-yellow-50/60' : 'bg-red-50/50'
@@ -869,17 +857,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
 
                                         {status !== 'Pendente' && (
                                             <td className={`px-4 py-3.5 text-right font-semibold ${situacao === 'atendido' ? 'text-green-700' : situacao === 'parcial' ? 'text-yellow-700' : 'text-red-600'}`}>
-                                                {status === 'Realizado' && canSolicitante ? (
-                                                    <input
-                                                        type="number"
-                                                        min={0}
-                                                        value={itemAtendidaEdit[item.id] ?? item.quantidade_atendida}
-                                                        onChange={e => setItemAtendidaEdit(p => ({ ...p, [item.id]: parseInt(e.target.value) || 0 }))}
-                                                        className="w-20 border border-slate-200 rounded px-2 py-1 text-xs text-right font-semibold focus:outline-none focus:ring-2 focus:ring-[#001A72]"
-                                                    />
-                                                ) : (
-                                                    item.quantidade_atendida
-                                                )}
+                                                {item.quantidade_atendida}
                                             </td>
                                         )}
 
