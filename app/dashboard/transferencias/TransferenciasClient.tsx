@@ -139,7 +139,7 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
 
             if (piOrigem) {
                 await supabase.from('pedidos_itens')
-                    .update({ quantidade_recebida: qty })
+                    .update({ quantidade_atendida: qty, quantidade_recebida: qty })
                     .eq('id', piOrigem.id);
             }
 
@@ -155,10 +155,15 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
                         .from('pedidos_itens')
                         .select('quantidade_recebida, quantidade_atendida, quantidade')
                         .eq('pedido_id', piData.pedido_id);
+                    const allAtendido = allItems?.every(i => i.quantidade_atendida > 0);
                     const allReceived = allItems?.every(i => i.quantidade_recebida > 0);
                     if (allReceived) {
                         await supabase.from('pedidos')
                             .update({ status: 'Recebido' })
+                            .eq('id', piData.pedido_id);
+                    } else if (allAtendido) {
+                        await supabase.from('pedidos')
+                            .update({ status: 'Realizado' })
                             .eq('id', piData.pedido_id);
                     }
                 }
