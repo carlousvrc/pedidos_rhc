@@ -469,11 +469,6 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                 });
             }
 
-            // Auto-update status to "Em Cotação" if still Pendente
-            if (pedido?.status === 'Pendente') {
-                await supabase.from('pedidos').update({ status: 'Em Cotação' }).eq('id', id);
-            }
-
             closeRemanejModal();
             await loadData();
         } catch (err) {
@@ -503,6 +498,19 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
             }
 
             await supabase.from('remanejamentos').delete().eq('id', rem.id);
+
+            // If no more outgoing remanejamentos, revert to Pendente
+            const remainingItemIds = items.map(i => i.id);
+            const { data: remainingRems } = await supabase
+                .from('remanejamentos')
+                .select('id')
+                .in('pedido_item_origem_id', remainingItemIds);
+            if (!remainingRems || remainingRems.length === 0) {
+                if (pedido?.status === 'Em Cotação' || pedido?.status === 'Pendente') {
+                    await supabase.from('pedidos').update({ status: 'Pendente' }).eq('id', id);
+                }
+            }
+
             await loadData();
         } catch (err) {
             console.error('Erro ao remover remanejamento:', err);
