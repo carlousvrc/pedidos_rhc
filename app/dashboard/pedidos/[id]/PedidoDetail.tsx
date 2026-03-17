@@ -967,8 +967,8 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                                         </span>
                                                     ))
                                                 }
-                                                {/* Remanejar button for comprador */}
-                                                {canComprador && status === 'Pendente' && (
+                                                {/* Remanejar button for comprador — hide if already remanejado */}
+                                                {canComprador && status === 'Pendente' && remanejamentosOut.filter(r => r.pedido_item_origem_id === item.id).length === 0 && (
                                                     <button
                                                         onClick={() => openRemanejModal(item)}
                                                         className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium text-purple-600 border border-purple-200 rounded-md hover:bg-purple-50 transition-colors w-fit"
