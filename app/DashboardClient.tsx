@@ -102,6 +102,9 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [bulkDeleting, setBulkDeleting] = useState(false);
 
+    // Pending transfers for this user's unit
+    const [pendingTransfers, setPendingTransfers] = useState<any[]>([]);
+
     // Initial fetch
     useEffect(() => {
         setLoading(true);
@@ -109,7 +112,52 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
             setPedidos(applyScope(data));
             setLoading(false);
         });
+        loadPendingTransfers();
     }, [currentUser]);
+
+    async function loadPendingTransfers() {
+        const unidadeId = currentUser?.unidade_id;
+        if (!unidadeId) return;
+
+        // Get remanejamentos where origin order belongs to this unit and not yet received
+        const { data: rems } = await supabase
+            .from('remanejamentos')
+            .select('*')
+            .eq('quantidade_recebida', 0)
+            .order('created_at', { ascending: false });
+
+        if (!rems || rems.length === 0) { setPendingTransfers([]); return; }
+
+        const enriched: any[] = [];
+        for (const r of rems) {
+            // Get origin pedido's unit
+            const { data: pi } = await supabase.from('pedidos_itens').select('pedido_id').eq('id', r.pedido_item_origem_id).single();
+            if (!pi) continue;
+            const { data: ped } = await supabase.from('pedidos').select('unidade_id, numero_pedido').eq('id', pi.pedido_id).single();
+            if (!ped || ped.unidade_id !== unidadeId) continue;
+
+            // Get item info
+            const { data: item } = await supabase.from('itens').select('nome, codigo').eq('id', r.item_id).single();
+
+            // Get destination order info
+            const { data: destPed } = await supabase.from('pedidos').select('numero_pedido, unidade_id').eq('id', r.pedido_destino_id).single();
+            let destUnidade = '—';
+            if (destPed) {
+                const { data: u } = await supabase.from('unidades').select('nome').eq('id', destPed.unidade_id).single();
+                if (u) destUnidade = u.nome;
+            }
+
+            enriched.push({
+                id: r.id,
+                quantidade: r.quantidade,
+                item_nome: item?.nome || '—',
+                item_codigo: item?.codigo || '—',
+                destino_unidade: destUnidade,
+                destino_pedido_numero: destPed?.numero_pedido || '—',
+            });
+        }
+        setPendingTransfers(enriched);
+    }
 
     // Real-time subscription
     useEffect(() => {
@@ -398,6 +446,52 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                     </Link>
                 )}
             </div>
+
+            {/* Pending Transfers */}
+            {pendingTransfers.length > 0 && (
+                <div className="bg-amber-50 border-2 border-amber-200 rounded-xl overflow-hidden">
+                    <div className="px-5 py-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-lg bg-amber-200 flex items-center justify-center shrink-0">
+                                <ArrowRightLeft className="w-5 h-5 text-amber-800" />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-bold text-amber-900">Transferências a receber ({pendingTransfers.length})</h3>
+                                <p className="text-xs text-amber-700 mt-0.5">Itens remanejados que aguardam confirmação de recebimento</p>
+                            </div>
+                        </div>
+                        <Link href="/dashboard/transferencias"
+                            className="text-xs font-semibold text-amber-800 bg-amber-200 hover:bg-amber-300 px-3 py-1.5 rounded-lg transition-colors">
+                            Ver todas
+                        </Link>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full text-sm divide-y divide-amber-100">
+                            <thead className="bg-amber-100/50">
+                                <tr>
+                                    <th className="px-4 py-2 text-left text-xs font-bold text-amber-800 uppercase">Item</th>
+                                    <th className="px-4 py-2 text-left text-xs font-bold text-amber-800 uppercase">Código</th>
+                                    <th className="px-4 py-2 text-right text-xs font-bold text-amber-800 uppercase">Qtd</th>
+                                    <th className="px-4 py-2 text-left text-xs font-bold text-amber-800 uppercase">Virá de</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-amber-100/50">
+                                {pendingTransfers.map(t => (
+                                    <tr key={t.id} className="hover:bg-amber-100/30">
+                                        <td className="px-4 py-2.5 text-slate-800 font-medium truncate max-w-[250px]">{t.item_nome}</td>
+                                        <td className="px-4 py-2.5 text-slate-500 font-mono text-xs">{t.item_codigo}</td>
+                                        <td className="px-4 py-2.5 text-right font-bold text-amber-800">{t.quantidade} un.</td>
+                                        <td className="px-4 py-2.5">
+                                            <span className="text-xs font-semibold text-slate-700">{t.destino_unidade}</span>
+                                            <span className="text-[11px] text-slate-400 ml-1">(#{t.destino_pedido_numero})</span>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
 
             {/* Orders Table */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
