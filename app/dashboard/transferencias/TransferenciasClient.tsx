@@ -15,6 +15,7 @@ interface TransferenciaItem {
     quantidade: number;
     item_id: string;
     unidade_destino_id: string;
+    unidade_destino_nome: string;
     created_at: string;
     item_nome: string;
     item_codigo: string;
@@ -34,61 +35,89 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
     async function loadTransferencias() {
         setLoading(true);
 
-        // Get user's unidade_id
         const unidadeId = currentUser.unidade_id;
-        if (!unidadeId) {
-            // Admin/comprador without unit — show all
-            const { data } = await supabase
-                .from('remanejamentos')
-                .select(`
-                    id, quantidade, item_id, unidade_destino_id, created_at,
-                    itens(nome, codigo),
-                    unidades!remanejamentos_unidade_destino_id_fkey(nome),
-                    pedidos_itens!remanejamentos_pedido_item_origem_id_fkey(
-                        pedido_id,
-                        pedidos(id, numero_pedido, unidades(nome))
-                    )
-                `)
-                .order('created_at', { ascending: false });
 
-            setTransferencias(mapData(data));
+        // Base query — fetch all remanejamentos
+        let query = supabase
+            .from('remanejamentos')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        // Solicitante: only transfers TO their unit
+        if (unidadeId) {
+            query = query.eq('unidade_destino_id', unidadeId);
+        }
+
+        const { data: rems, error } = await query;
+        if (error || !rems || rems.length === 0) {
+            console.log('remanejamentos query:', error, rems);
+            setTransferencias([]);
             setLoading(false);
             return;
         }
 
-        // Solicitante: only show transfers TO their unit
-        const { data } = await supabase
-            .from('remanejamentos')
-            .select(`
-                id, quantidade, item_id, unidade_destino_id, created_at,
-                itens(nome, codigo),
-                unidades!remanejamentos_unidade_destino_id_fkey(nome),
-                pedidos_itens!remanejamentos_pedido_item_origem_id_fkey(
-                    pedido_id,
-                    pedidos(id, numero_pedido, unidades(nome))
-                )
-            `)
-            .eq('unidade_destino_id', unidadeId)
-            .order('created_at', { ascending: false });
+        // Enrich with item, origin pedido, and unit names
+        const enriched: TransferenciaItem[] = [];
+        for (const r of rems) {
+            // Get item info
+            const { data: item } = await supabase
+                .from('itens')
+                .select('nome, codigo')
+                .eq('id', r.item_id)
+                .single();
 
-        setTransferencias(mapData(data));
+            // Get destination unit name
+            const { data: unidadeDest } = await supabase
+                .from('unidades')
+                .select('nome')
+                .eq('id', r.unidade_destino_id)
+                .single();
+
+            // Get origin pedido info via pedidos_itens
+            const { data: pi } = await supabase
+                .from('pedidos_itens')
+                .select('pedido_id')
+                .eq('id', r.pedido_item_origem_id)
+                .single();
+
+            let origemUnidade = '—';
+            let origemPedidoNumero = '—';
+            let origemPedidoId = '';
+            if (pi) {
+                const { data: ped } = await supabase
+                    .from('pedidos')
+                    .select('id, numero_pedido, unidade_id')
+                    .eq('id', pi.pedido_id)
+                    .single();
+                if (ped) {
+                    origemPedidoNumero = ped.numero_pedido;
+                    origemPedidoId = ped.id;
+                    const { data: uOrig } = await supabase
+                        .from('unidades')
+                        .select('nome')
+                        .eq('id', ped.unidade_id)
+                        .single();
+                    if (uOrig) origemUnidade = uOrig.nome;
+                }
+            }
+
+            enriched.push({
+                id: r.id,
+                quantidade: r.quantidade,
+                item_id: r.item_id,
+                unidade_destino_id: r.unidade_destino_id,
+                unidade_destino_nome: unidadeDest?.nome || '—',
+                created_at: r.created_at,
+                item_nome: item?.nome || '—',
+                item_codigo: item?.codigo || '—',
+                origem_unidade_nome: origemUnidade,
+                origem_pedido_numero: origemPedidoNumero,
+                origem_pedido_id: origemPedidoId,
+            });
+        }
+
+        setTransferencias(enriched);
         setLoading(false);
-    }
-
-    function mapData(data: any[] | null): TransferenciaItem[] {
-        if (!data) return [];
-        return data.map((r: any) => ({
-            id: r.id,
-            quantidade: r.quantidade,
-            item_id: r.item_id,
-            unidade_destino_id: r.unidade_destino_id,
-            created_at: r.created_at,
-            item_nome: r.itens?.nome || '—',
-            item_codigo: r.itens?.codigo || '—',
-            origem_unidade_nome: r.pedidos_itens?.pedidos?.unidades?.nome || '—',
-            origem_pedido_numero: r.pedidos_itens?.pedidos?.numero_pedido || '—',
-            origem_pedido_id: r.pedidos_itens?.pedidos?.id || '',
-        }));
     }
 
     if (loading) {
@@ -141,6 +170,7 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
                                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Código</th>
                                     <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Quantidade</th>
                                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Origem</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Destino</th>
                                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Pedido</th>
                                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Data</th>
                                 </tr>
@@ -162,6 +192,11 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
                                         <td className="px-4 py-3.5">
                                             <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-purple-100 text-purple-700">
                                                 {t.origem_unidade_nome}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3.5">
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-amber-100 text-amber-800">
+                                                {t.unidade_destino_nome}
                                             </span>
                                         </td>
                                         <td className="px-4 py-3.5">

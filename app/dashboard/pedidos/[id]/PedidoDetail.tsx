@@ -159,12 +159,14 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
             if (itemIds.length > 0) {
                 const { data: remOut } = await supabase
                     .from('remanejamentos')
-                    .select('*, unidades!remanejamentos_unidade_destino_id_fkey(nome)')
+                    .select('*')
                     .in('pedido_item_origem_id', itemIds);
-                setRemanejamentosOut((remOut || []).map((r: any) => ({
-                    ...r,
-                    unidade_destino: r.unidades,
-                })));
+                const outEnriched: Remanejamento[] = [];
+                for (const r of (remOut || [])) {
+                    const { data: uDest } = await supabase.from('unidades').select('nome').eq('id', r.unidade_destino_id).single();
+                    outEnriched.push({ ...r, unidade_destino: uDest || undefined });
+                }
+                setRemanejamentosOut(outEnriched);
             } else {
                 setRemanejamentosOut([]);
             }
@@ -173,12 +175,22 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
             if (supabasePedido.unidade_id) {
                 const { data: remIn } = await supabase
                     .from('remanejamentos')
-                    .select('*, pedidos_itens!remanejamentos_pedido_item_origem_id_fkey(pedido_id, pedidos(numero_pedido, unidades(nome)))')
+                    .select('*')
                     .eq('unidade_destino_id', supabasePedido.unidade_id);
-                setRemanejamentosIn((remIn || []).map((r: any) => ({
-                    ...r,
-                    pedido_origem: r.pedidos_itens?.pedidos,
-                })));
+                const inEnriched: Remanejamento[] = [];
+                for (const r of (remIn || [])) {
+                    const { data: pi } = await supabase.from('pedidos_itens').select('pedido_id').eq('id', r.pedido_item_origem_id).single();
+                    let pedido_origem: Remanejamento['pedido_origem'];
+                    if (pi) {
+                        const { data: ped } = await supabase.from('pedidos').select('numero_pedido, unidade_id').eq('id', pi.pedido_id).single();
+                        if (ped) {
+                            const { data: uOrig } = await supabase.from('unidades').select('nome').eq('id', ped.unidade_id).single();
+                            pedido_origem = { numero_pedido: ped.numero_pedido, unidades: uOrig || undefined };
+                        }
+                    }
+                    inEnriched.push({ ...r, pedido_origem });
+                }
+                setRemanejamentosIn(inEnriched);
             } else {
                 setRemanejamentosIn([]);
             }
