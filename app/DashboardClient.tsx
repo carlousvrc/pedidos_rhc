@@ -163,9 +163,14 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
 
             {/* Page Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Dashboard</h1>
-                    <p className="text-slate-500 mt-1 text-sm">Visão geral e acesso rápido aos pedidos hospitalares.</p>
+                <div className="flex items-center gap-3">
+                    <div className="bg-white rounded-lg px-2 py-1 shadow-sm border border-slate-100">
+                        <img src="/logo.png" alt="Hospital Casa Logo" className="h-10 w-auto object-contain" />
+                    </div>
+                    <div>
+                        <h1 className="text-2xl font-bold text-slate-800 tracking-tight">RHC Pedidos</h1>
+                        <p className="text-slate-500 text-sm">Visão geral e acesso rápido aos pedidos hospitalares.</p>
+                    </div>
                 </div>
                 <div className="flex items-center gap-3">
                     {(loading || updating) && (
