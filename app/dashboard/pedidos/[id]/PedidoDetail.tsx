@@ -861,7 +861,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                                     .map(r => (
                                                         <div key={r.id} className="flex items-center gap-1.5">
                                                             <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-purple-100 text-purple-700">
-                                                                {r.quantidade} un. virão via {r.unidade_destino?.nome}
+                                                                {r.quantidade} un. → {r.unidade_destino?.nome}
                                                             </span>
                                                             {canComprador && (
                                                                 <button
@@ -880,7 +880,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                                     .filter(r => r.item_id === item.item_id)
                                                     .map(r => (
                                                         <span key={r.id} className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-amber-100 text-amber-800">
-                                                            Separar {r.quantidade} un. p/ {r.pedido_origem?.unidades?.nome}
+                                                            {r.quantidade} un. de {r.pedido_origem?.unidades?.nome}
                                                         </span>
                                                     ))
                                                 }
@@ -1030,9 +1030,8 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
 
                             {remanejSelected && (parseInt(remanejQty) || 0) > 0 && (
                                 <div className="bg-amber-50 rounded-lg px-4 py-3 text-xs text-amber-800 space-y-1 border border-amber-200">
-                                    <p><strong>{parseInt(remanejQty) || 0}</strong> un. de <strong>{remanejModalItem.itens.nome}</strong></p>
-                                    <p>Chegarão via <strong>{remanejSelected.nome}</strong></p>
-                                    <p className="text-amber-600">Ao receber, <strong>{remanejSelected.nome}</strong> deverá separar {parseInt(remanejQty) || 0} un. para <strong>{pedido?.unidades?.nome}</strong></p>
+                                    <p><strong>{parseInt(remanejQty) || 0}</strong> un. de <strong>{remanejModalItem.itens.nome}</strong> serão transferidas para <strong>{remanejSelected.nome}</strong></p>
+                                    <p className="text-amber-600">Ao receber o pedido, <strong>{remanejSelected.nome}</strong> será notificada de que {parseInt(remanejQty) || 0} un. vieram de <strong>{pedido?.unidades?.nome}</strong></p>
                                 </div>
                             )}
                         </div>
