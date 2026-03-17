@@ -75,14 +75,6 @@ export async function Navbar() {
                             Relatórios
                         </Link>
                     )}
-                    {mod?.bionexo && (
-                        <Link
-                            href="/dashboard/bionexo"
-                            className="px-3 py-1.5 rounded-md text-xs font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
-                        >
-                            Bionexo
-                        </Link>
-                    )}
                     {mod?.transferencias !== false && (
                         <Link
                             href="/dashboard/transferencias"

@@ -277,15 +277,6 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                         <p className="text-[11px] text-slate-400 mt-0.5">Dados e análises</p>
                     </Link>
                 )}
-                {currentUser?.permissoes?.modulos?.bionexo && (
-                    <Link href="/dashboard/bionexo" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
-                        <div className="p-2.5 bg-sky-50 text-sky-600 rounded-lg w-fit group-hover:bg-sky-600 group-hover:text-white transition-colors">
-                            <FileSpreadsheet className="w-5 h-5" />
-                        </div>
-                        <p className="text-sm font-semibold text-slate-800 mt-3">Bionexo</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">Importar cotações</p>
-                    </Link>
-                )}
                 {currentUser?.permissoes?.modulos?.itens && (
                     <Link href="/dashboard/itens" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
                         <div className="p-2.5 bg-orange-50 text-orange-600 rounded-lg w-fit group-hover:bg-orange-600 group-hover:text-white transition-colors">
