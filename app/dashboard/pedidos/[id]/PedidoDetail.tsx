@@ -770,7 +770,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                 </div>
             )}
 
-            {/* ── Alerta de Transferências (solicitante) ────────────────── */}
+            {/* ── Alerta: itens que serão recebidos por outra unidade (origem) ── */}
             {remanejamentosOut.length > 0 && canSolicitante && (
                 <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-5 space-y-3">
                     <div className="flex items-center gap-3">
@@ -778,8 +778,8 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                             <ArrowRightLeft className="w-5 h-5 text-purple-800" />
                         </div>
                         <div>
-                            <h3 className="text-sm font-bold text-purple-900">Itens remanejados</h3>
-                            <p className="text-xs text-purple-700 mt-0.5">Os itens abaixo foram adicionados a outro pedido pelo comprador.</p>
+                            <h3 className="text-sm font-bold text-purple-900">Itens recebidos por outra unidade</h3>
+                            <p className="text-xs text-purple-700 mt-0.5">Os itens abaixo serão recebidos por outra unidade e transferidos para você.</p>
                         </div>
                     </div>
                     <div className="space-y-1.5">
@@ -790,7 +790,36 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                     <span className="text-sm font-bold text-purple-800 min-w-[50px]">{r.quantidade} un.</span>
                                     <span className="text-sm text-slate-700 font-medium flex-1 truncate">{itemMatch?.itens.nome || '—'}</span>
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-purple-100 text-purple-700 shrink-0">
-                                        → #{r.destino_pedido_numero} ({r.destino_unidade_nome})
+                                        via {r.destino_unidade_nome} (#{r.destino_pedido_numero})
+                                    </span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* ── Alerta: itens para transferir para outra unidade (destino) ── */}
+            {remanejamentosIn.length > 0 && canSolicitante && (
+                <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-5 space-y-3">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-amber-200 flex items-center justify-center shrink-0">
+                            <ArrowRightLeft className="w-5 h-5 text-amber-800" />
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-bold text-amber-900">Itens para transferir</h3>
+                            <p className="text-xs text-amber-700 mt-0.5">Ao receber este pedido, transfira os itens abaixo para as unidades indicadas.</p>
+                        </div>
+                    </div>
+                    <div className="space-y-1.5">
+                        {remanejamentosIn.map(r => {
+                            const itemMatch = items.find(i => i.item_id === r.item_id);
+                            return (
+                                <div key={r.id} className="flex items-center gap-3 bg-white rounded-lg border border-amber-200 px-4 py-2.5">
+                                    <span className="text-sm font-bold text-amber-800 min-w-[50px]">{r.quantidade} un.</span>
+                                    <span className="text-sm text-slate-700 font-medium flex-1 truncate">{itemMatch?.itens.nome || '—'}</span>
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-amber-100 text-amber-800 shrink-0">
+                                        → {r.origem_unidade_nome}
                                     </span>
                                 </div>
                             );
@@ -909,13 +938,13 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                         {/* Remanejamento info */}
                                         <td className="px-4 py-3.5">
                                             <div className="flex flex-col gap-1">
-                                                {/* Outgoing: item moved to another order */}
+                                                {/* Outgoing: item will be received via another unit's order */}
                                                 {remanejamentosOut
                                                     .filter(r => r.pedido_item_origem_id === item.id)
                                                     .map(r => (
                                                         <div key={r.id} className="flex items-center gap-1.5">
                                                             <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-purple-100 text-purple-700">
-                                                                {r.quantidade} un. → #{r.destino_pedido_numero} ({r.destino_unidade_nome})
+                                                                {r.quantidade} un. via {r.destino_unidade_nome} (#{r.destino_pedido_numero})
                                                             </span>
                                                             {canComprador && (
                                                                 <button
@@ -929,12 +958,12 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                                         </div>
                                                     ))
                                                 }
-                                                {/* Incoming: item added from another order */}
+                                                {/* Incoming: need to transfer to another unit */}
                                                 {remanejamentosIn
                                                     .filter(r => r.item_id === item.item_id)
                                                     .map(r => (
-                                                        <span key={r.id} className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-indigo-100 text-indigo-700">
-                                                            +{r.quantidade} un. de #{r.origem_pedido_numero} ({r.origem_unidade_nome})
+                                                        <span key={r.id} className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-amber-100 text-amber-800">
+                                                            Transferir {r.quantidade} un. p/ {r.origem_unidade_nome}
                                                         </span>
                                                     ))
                                                 }
