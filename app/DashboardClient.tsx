@@ -3,9 +3,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { FileText, Clock, CheckCircle, Plus, RefreshCw, ShoppingCart, Search, X, Trash2, ArrowRightLeft, History, BarChart3, Package, Users, FileSpreadsheet } from 'lucide-react';
+import { FileText, Clock, CheckCircle, Plus, RefreshCw, ShoppingCart, Search, X, Trash2, ArrowRightLeft, History, BarChart3, Package, Users, FileSpreadsheet, LogOut } from 'lucide-react';
 import type { Usuario } from '@/lib/auth';
 import ConfirmModal from './components/ConfirmModal';
+import { logoutUser } from './login/actions';
 
 interface DashboardClientProps {
     currentUser: Usuario | null;
@@ -211,12 +212,24 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                         <p className="text-slate-500 text-sm">Visão geral e acesso rápido aos pedidos hospitalares.</p>
                     </div>
                 </div>
-                {(loading || updating) && (
-                    <span className="flex items-center gap-1.5 text-xs text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">
-                        <RefreshCw className="w-3 h-3 animate-spin" />
-                        {loading ? 'Carregando...' : 'Atualizando...'}
-                    </span>
-                )}
+                <div className="flex items-center gap-3">
+                    {(loading || updating) && (
+                        <span className="flex items-center gap-1.5 text-xs text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">
+                            <RefreshCw className="w-3 h-3 animate-spin" />
+                            {loading ? 'Carregando...' : 'Atualizando...'}
+                        </span>
+                    )}
+                    <form action={logoutUser}>
+                        <button
+                            type="submit"
+                            className="flex items-center gap-2 px-3 py-2 text-sm text-slate-600 bg-slate-100 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
+                            title="Sair do sistema"
+                        >
+                            <LogOut className="w-4 h-4" />
+                            <span className="hidden sm:inline">Sair</span>
+                        </button>
+                    </form>
+                </div>
             </div>
 
             {/* Status Cards */}
