@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import type { Usuario } from '@/lib/auth';
-import { ArrowRightLeft, RefreshCw, Package, ChevronRight } from 'lucide-react';
+import { ArrowRightLeft, RefreshCw, Package, ChevronRight, CheckCircle2 } from 'lucide-react';
 
 interface TransferenciasClientProps {
     currentUser: Usuario;
@@ -12,11 +12,14 @@ interface TransferenciasClientProps {
 
 interface TransferenciaItem {
     id: string;
+    pedido_item_origem_id: string;
     quantidade: number;
+    quantidade_recebida: number;
     item_id: string;
     created_at: string;
     item_nome: string;
     item_codigo: string;
+    origem_unidade_id: string;
     origem_unidade_nome: string;
     origem_pedido_numero: string;
     origem_pedido_id: string;
@@ -28,6 +31,12 @@ interface TransferenciaItem {
 export default function TransferenciasClient({ currentUser }: TransferenciasClientProps) {
     const [transferencias, setTransferencias] = useState<TransferenciaItem[]>([]);
     const [loading, setLoading] = useState(true);
+    const [qtyEdits, setQtyEdits] = useState<Record<string, number>>({});
+    const [saving, setSaving] = useState<Record<string, boolean>>({});
+
+    const unidadeId = currentUser.unidade_id;
+    const role = currentUser.role;
+    const showAll = role === 'admin' || role === 'comprador';
 
     useEffect(() => {
         loadTransferencias();
@@ -36,11 +45,6 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
     async function loadTransferencias() {
         setLoading(true);
 
-        const unidadeId = currentUser.unidade_id;
-        const role = currentUser.role;
-        const showAll = role === 'admin' || role === 'comprador';
-
-        // Fetch all remanejamentos
         const { data: rems } = await supabase
             .from('remanejamentos')
             .select('*')
@@ -52,14 +56,11 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
             return;
         }
 
-        // Enrich each remanejamento
         const enriched: TransferenciaItem[] = [];
         for (const r of rems) {
-            // Item info
             const { data: item } = await supabase
                 .from('itens').select('nome, codigo').eq('id', r.item_id).single();
 
-            // Origin pedido via pedidos_itens
             const { data: pi } = await supabase
                 .from('pedidos_itens').select('pedido_id').eq('id', r.pedido_item_origem_id).single();
 
@@ -76,7 +77,6 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
                 }
             }
 
-            // Destination pedido
             const { data: destPed } = await supabase
                 .from('pedidos').select('id, numero_pedido, unidade_id').eq('id', r.pedido_destino_id).single();
             let destinoUnidade = '—', destinoPedNum = '—', destinoPedId = '', destinoUnidadeId = '';
@@ -88,18 +88,20 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
                 if (u) destinoUnidade = u.nome;
             }
 
-            // Filter: solicitante sees only their unit (origin or destination)
             if (!showAll && unidadeId) {
                 if (origemUnidadeId !== unidadeId && destinoUnidadeId !== unidadeId) continue;
             }
 
             enriched.push({
                 id: r.id,
+                pedido_item_origem_id: r.pedido_item_origem_id,
                 quantidade: r.quantidade,
+                quantidade_recebida: r.quantidade_recebida ?? 0,
                 item_id: r.item_id,
                 created_at: r.created_at,
                 item_nome: item?.nome || '—',
                 item_codigo: item?.codigo || '—',
+                origem_unidade_id: origemUnidadeId,
                 origem_unidade_nome: origemUnidade,
                 origem_pedido_numero: origemPedNum,
                 origem_pedido_id: origemPedId,
@@ -110,7 +112,70 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
         }
 
         setTransferencias(enriched);
+        // Init qty edits
+        const edits: Record<string, number> = {};
+        for (const t of enriched) {
+            edits[t.id] = t.quantidade_recebida > 0 ? t.quantidade_recebida : t.quantidade;
+        }
+        setQtyEdits(edits);
         setLoading(false);
+    }
+
+    async function handleConfirmRecebimento(t: TransferenciaItem) {
+        const qty = qtyEdits[t.id] ?? 0;
+        setSaving(p => ({ ...p, [t.id]: true }));
+        try {
+            // Update remanejamento quantidade_recebida
+            await supabase.from('remanejamentos')
+                .update({ quantidade_recebida: qty })
+                .eq('id', t.id);
+
+            // Update origin pedido_item quantidade_recebida
+            const { data: piOrigem } = await supabase
+                .from('pedidos_itens')
+                .select('id, quantidade_recebida')
+                .eq('id', t.pedido_item_origem_id)
+                .single();
+
+            if (piOrigem) {
+                await supabase.from('pedidos_itens')
+                    .update({ quantidade_recebida: qty })
+                    .eq('id', piOrigem.id);
+            }
+
+            // Check if all items in origin order are received → update order status
+            if (piOrigem) {
+                const { data: piData } = await supabase
+                    .from('pedidos_itens')
+                    .select('pedido_id')
+                    .eq('id', t.pedido_item_origem_id)
+                    .single();
+                if (piData) {
+                    const { data: allItems } = await supabase
+                        .from('pedidos_itens')
+                        .select('quantidade_recebida, quantidade_atendida, quantidade')
+                        .eq('pedido_id', piData.pedido_id);
+                    const allReceived = allItems?.every(i => i.quantidade_recebida > 0);
+                    if (allReceived) {
+                        await supabase.from('pedidos')
+                            .update({ status: 'Recebido' })
+                            .eq('id', piData.pedido_id);
+                    }
+                }
+            }
+
+            await loadTransferencias();
+        } catch (err) {
+            console.error('Erro ao confirmar recebimento:', err);
+        } finally {
+            setSaving(p => ({ ...p, [t.id]: false }));
+        }
+    }
+
+    // Check if current user can confirm receipt (they are the origin unit — items coming to them)
+    function canConfirm(t: TransferenciaItem): boolean {
+        if (showAll) return true;
+        return unidadeId === t.origem_unidade_id;
     }
 
     if (loading) {
@@ -157,46 +222,91 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
                                     <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Qtd</th>
                                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">De (Origem)</th>
                                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Para (Destino)</th>
+                                    <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Qtd Recebida</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Status</th>
                                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Data</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-slate-100">
-                                {transferencias.map(t => (
-                                    <tr key={t.id} className="hover:bg-purple-50/40 transition-colors">
-                                        <td className="px-4 py-3.5 text-slate-800 font-medium max-w-[250px] truncate">
-                                            {t.item_nome}
-                                        </td>
-                                        <td className="px-4 py-3.5 text-slate-500 font-mono text-xs">
-                                            {t.item_codigo}
-                                        </td>
-                                        <td className="px-4 py-3.5 text-right">
-                                            <span className="inline-flex items-center gap-1 px-2.5 py-1 text-sm font-bold rounded-lg bg-purple-100 text-purple-800">
-                                                {t.quantidade} un.
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3.5">
-                                            <div className="flex flex-col gap-0.5">
-                                                <span className="text-xs font-semibold text-slate-700">{t.origem_unidade_nome}</span>
-                                                <Link href={`/dashboard/pedidos/${t.origem_pedido_id}`}
-                                                    className="text-[#001A72] hover:underline text-[11px]">
-                                                    Pedido #{t.origem_pedido_numero}
-                                                </Link>
-                                            </div>
-                                        </td>
-                                        <td className="px-4 py-3.5">
-                                            <div className="flex flex-col gap-0.5">
-                                                <span className="text-xs font-semibold text-slate-700">{t.destino_unidade_nome}</span>
-                                                <Link href={`/dashboard/pedidos/${t.destino_pedido_id}`}
-                                                    className="text-[#001A72] hover:underline text-[11px]">
-                                                    Pedido #{t.destino_pedido_numero}
-                                                </Link>
-                                            </div>
-                                        </td>
-                                        <td className="px-4 py-3.5 text-xs text-slate-500">
-                                            {new Date(t.created_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
-                                        </td>
-                                    </tr>
-                                ))}
+                                {transferencias.map(t => {
+                                    const recebido = t.quantidade_recebida > 0;
+                                    const canEdit = canConfirm(t) && !recebido;
+                                    const isSaving = saving[t.id] ?? false;
+
+                                    return (
+                                        <tr key={t.id} className={`transition-colors ${recebido ? 'bg-green-50/40' : 'hover:bg-purple-50/40'}`}>
+                                            <td className="px-4 py-3.5 text-slate-800 font-medium max-w-[250px] truncate">
+                                                {t.item_nome}
+                                            </td>
+                                            <td className="px-4 py-3.5 text-slate-500 font-mono text-xs">
+                                                {t.item_codigo}
+                                            </td>
+                                            <td className="px-4 py-3.5 text-right">
+                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 text-sm font-bold rounded-lg bg-purple-100 text-purple-800">
+                                                    {t.quantidade} un.
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3.5">
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="text-xs font-semibold text-slate-700">{t.origem_unidade_nome}</span>
+                                                    <Link href={`/dashboard/pedidos/${t.origem_pedido_id}`}
+                                                        className="text-[#001A72] hover:underline text-[11px]">
+                                                        Pedido #{t.origem_pedido_numero}
+                                                    </Link>
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3.5">
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="text-xs font-semibold text-slate-700">{t.destino_unidade_nome}</span>
+                                                    <Link href={`/dashboard/pedidos/${t.destino_pedido_id}`}
+                                                        className="text-[#001A72] hover:underline text-[11px]">
+                                                        Pedido #{t.destino_pedido_numero}
+                                                    </Link>
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3.5 text-right">
+                                                {canEdit ? (
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <input
+                                                            type="number"
+                                                            min={0}
+                                                            max={t.quantidade}
+                                                            value={qtyEdits[t.id] ?? t.quantidade}
+                                                            onChange={e => setQtyEdits(p => ({ ...p, [t.id]: parseInt(e.target.value) || 0 }))}
+                                                            className="w-20 border border-slate-200 rounded px-2 py-1 text-xs text-right font-semibold focus:outline-none focus:ring-2 focus:ring-[#001A72]"
+                                                        />
+                                                        <button
+                                                            onClick={() => handleConfirmRecebimento(t)}
+                                                            disabled={isSaving}
+                                                            className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors disabled:opacity-50"
+                                                        >
+                                                            {isSaving ? <RefreshCw className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                                                            Confirmar
+                                                        </button>
+                                                    </div>
+                                                ) : recebido ? (
+                                                    <span className="font-semibold text-green-700">{t.quantidade_recebida}</span>
+                                                ) : (
+                                                    <span className="text-slate-400">—</span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3.5">
+                                                {recebido ? (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-green-100 text-green-700">
+                                                        <CheckCircle2 className="w-3 h-3" /> Recebido
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-orange-100 text-orange-700">
+                                                        Pendente
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3.5 text-xs text-slate-500">
+                                                {new Date(t.created_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>

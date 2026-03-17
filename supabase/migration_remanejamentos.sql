@@ -9,6 +9,7 @@ CREATE TABLE remanejamentos (
     pedido_destino_id UUID NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE,
     item_id UUID NOT NULL REFERENCES itens(id),
     quantidade INTEGER NOT NULL CHECK (quantidade > 0),
+    quantidade_recebida INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
