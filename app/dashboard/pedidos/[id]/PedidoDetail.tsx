@@ -704,6 +704,35 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                 </div>
             )}
 
+            {/* ── Alerta de Transferências (solicitante) ────────────────── */}
+            {remanejamentosIn.length > 0 && canSolicitante && (
+                <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-5 space-y-3">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-amber-200 flex items-center justify-center shrink-0">
+                            <ArrowRightLeft className="w-5 h-5 text-amber-800" />
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-bold text-amber-900">Transferências a realizar</h3>
+                            <p className="text-xs text-amber-700 mt-0.5">Ao receber este pedido, separe os itens abaixo para as unidades indicadas.</p>
+                        </div>
+                    </div>
+                    <div className="space-y-1.5">
+                        {remanejamentosIn.map(r => {
+                            const itemMatch = items.find(i => i.item_id === r.item_id);
+                            return (
+                                <div key={r.id} className="flex items-center gap-3 bg-white rounded-lg border border-amber-200 px-4 py-2.5">
+                                    <span className="text-sm font-bold text-amber-800 min-w-[50px]">{r.quantidade} un.</span>
+                                    <span className="text-sm text-slate-700 font-medium flex-1 truncate">{itemMatch?.itens.nome || '—'}</span>
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-purple-100 text-purple-700 shrink-0">
+                                        → {r.pedido_origem?.unidades?.nome}
+                                    </span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
             {/* ── Tabela de Itens ──────────────────────────────────────────── */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">

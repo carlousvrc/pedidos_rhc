@@ -83,6 +83,14 @@ export async function Navbar() {
                             Bionexo
                         </Link>
                     )}
+                    {mod?.transferencias !== false && (
+                        <Link
+                            href="/dashboard/transferencias"
+                            className="px-3 py-1.5 rounded-md text-xs font-medium text-white/80 transition-colors hover:bg-[#001250] hover:text-white"
+                        >
+                            Transferências
+                        </Link>
+                    )}
                     {mod?.itens && (
                         <Link
                             href="/dashboard/itens"

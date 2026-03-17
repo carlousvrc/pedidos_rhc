@@ -11,6 +11,7 @@ export interface Permissoes {
         relatorios: boolean;
         bionexo: boolean;
         usuarios: boolean;
+        transferencias: boolean;
     };
 }
 
@@ -32,6 +33,7 @@ const DEFAULT_PERMISSOES: Permissoes = {
         relatorios: false,
         bionexo: false,
         usuarios: false,
+        transferencias: true,
     },
 };
 
@@ -43,13 +45,13 @@ function resolvePermissoes(raw: any, role: string): Permissoes {
     if (role === 'admin') {
         return {
             scope: 'admin',
-            modulos: { pedidos: true, historico: true, itens: true, relatorios: true, bionexo: true, usuarios: true },
+            modulos: { pedidos: true, historico: true, itens: true, relatorios: true, bionexo: true, usuarios: true, transferencias: true },
         };
     }
     if (role === 'comprador') {
         return {
             scope: 'admin',
-            modulos: { pedidos: true, historico: true, itens: false, relatorios: true, bionexo: true, usuarios: false },
+            modulos: { pedidos: true, historico: true, itens: false, relatorios: true, bionexo: true, usuarios: false, transferencias: true },
         };
     }
     return DEFAULT_PERMISSOES;
