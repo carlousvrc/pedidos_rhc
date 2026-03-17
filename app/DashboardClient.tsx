@@ -341,6 +341,64 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                 </div>
             </div>
 
+            {/* Quick Access Modules */}
+            <div className="flex gap-3 overflow-x-auto pb-1">
+                {canCreateOrder && (
+                    <Link href="/dashboard/pedidos/novo" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
+                        <div className="p-2.5 bg-blue-50 text-[#001A72] rounded-lg w-fit group-hover:bg-[#001A72] group-hover:text-white transition-colors">
+                            <Plus className="w-5 h-5" />
+                        </div>
+                        <p className="text-sm font-semibold text-slate-800 mt-3">Novo Pedido</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Criar solicitação</p>
+                    </Link>
+                )}
+                {currentUser?.permissoes?.modulos?.historico !== false && (
+                    <Link href="/dashboard/historico" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
+                        <div className="p-2.5 bg-slate-50 text-slate-600 rounded-lg w-fit group-hover:bg-[#001A72] group-hover:text-white transition-colors">
+                            <History className="w-5 h-5" />
+                        </div>
+                        <p className="text-sm font-semibold text-slate-800 mt-3">Histórico</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Pedidos anteriores</p>
+                    </Link>
+                )}
+                {currentUser?.permissoes?.modulos?.transferencias !== false && (
+                    <Link href="/dashboard/transferencias" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-purple-300 hover:shadow-md transition-all group">
+                        <div className="p-2.5 bg-purple-50 text-purple-600 rounded-lg w-fit group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                            <ArrowRightLeft className="w-5 h-5" />
+                        </div>
+                        <p className="text-sm font-semibold text-slate-800 mt-3">Transferências</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Remanejamentos</p>
+                    </Link>
+                )}
+                {currentUser?.permissoes?.modulos?.relatorios && (
+                    <Link href="/dashboard/relatorios" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
+                        <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-lg w-fit group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                            <BarChart3 className="w-5 h-5" />
+                        </div>
+                        <p className="text-sm font-semibold text-slate-800 mt-3">Relatórios</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Dados e análises</p>
+                    </Link>
+                )}
+                {currentUser?.permissoes?.modulos?.itens && (
+                    <Link href="/dashboard/itens" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
+                        <div className="p-2.5 bg-orange-50 text-orange-600 rounded-lg w-fit group-hover:bg-orange-600 group-hover:text-white transition-colors">
+                            <Package className="w-5 h-5" />
+                        </div>
+                        <p className="text-sm font-semibold text-slate-800 mt-3">Itens</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Catálogo de produtos</p>
+                    </Link>
+                )}
+                {currentUser?.permissoes?.modulos?.usuarios && (
+                    <Link href="/dashboard/usuarios" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
+                        <div className="p-2.5 bg-violet-50 text-violet-600 rounded-lg w-fit group-hover:bg-violet-600 group-hover:text-white transition-colors">
+                            <Users className="w-5 h-5" />
+                        </div>
+                        <p className="text-sm font-semibold text-slate-800 mt-3">Usuários</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Gerenciar acessos</p>
+                    </Link>
+                )}
+            </div>
+
             {/* Orders Table */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="px-6 py-5 border-b border-slate-100">
