@@ -158,6 +158,34 @@ function parseQty(text: string): number {
     return isNaN(n) ? 0 : n;
 }
 
+// Deduplicate a supplier name that may be repeated within the same PDF cell.
+// E.g. "DISTRIBUIDORA X DISTRIBUIDORA X" → "DISTRIBUIDORA X"
+function deduplicateFornecedor(raw: string): string {
+    if (!raw) return '';
+    const text = raw.trim();
+    // Try splitting in half — if both halves are equal, it's a duplicate
+    if (text.length >= 2 && text.length % 2 === 0) {
+        const half = text.length / 2;
+        const a = text.slice(0, half).trim();
+        const b = text.slice(half).trim();
+        if (a === b) return a;
+    }
+    // Also try splitting by double-space or detecting repeated substrings
+    const parts = text.split(/\s{2,}/);
+    if (parts.length === 2 && parts[0].trim() === parts[1].trim()) {
+        return parts[0].trim();
+    }
+    // Try word-level: if the text is "A B C A B C", deduplicate
+    const words = text.split(/\s+/);
+    if (words.length >= 2 && words.length % 2 === 0) {
+        const mid = words.length / 2;
+        const firstHalf = words.slice(0, mid).join(' ');
+        const secondHalf = words.slice(mid).join(' ');
+        if (firstHalf === secondHalf) return firstHalf;
+    }
+    return text;
+}
+
 // ── PDF Extraction ─────────────────────────────────────────────────────────────
 
 async function parseBionexoPdf(pdfBuffer: Buffer): Promise<{ itens: Array<{ codigo: string; quantidade: number; fornecedor: string }>; fornecedor: string }> {
@@ -261,7 +289,11 @@ async function parseBionexoPdf(pdfBuffer: Buffer): Promise<{ itens: Array<{ codi
 
             const codigo    = (row['codigo'] ?? '').trim();
             const quantidade = parseQty(row['quantidade'] ?? '');
-            const fornecedor = (row['fornecedor'] ?? '').trim();
+            const rawFornecedor = (row['fornecedor'] ?? '').trim();
+
+            // Deduplicate repeated supplier name within the same cell
+            // (some PDFs render the name twice at different Y positions)
+            const fornecedor = deduplicateFornecedor(rawFornecedor);
 
             if (fornecedor) fornecedores.add(fornecedor);
             if (codigo) results.push({ codigo, quantidade, fornecedor });
