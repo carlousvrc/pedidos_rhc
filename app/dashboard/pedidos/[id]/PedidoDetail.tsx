@@ -9,6 +9,7 @@ import {
     ChevronRight, Download, Save, Upload, RefreshCw,
     CheckCircle2, Pencil, FileText, X, ArrowRightLeft, Clock,
 } from 'lucide-react';
+import ConfirmModal from '@/app/components/ConfirmModal';
 import 'tom-select/dist/css/tom-select.css';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -145,6 +146,9 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     const [remanejPedidos,    setRemanejPedidos]    = useState<PedidoOption[]>([]);
     const remanejSelectElRef  = useRef<HTMLSelectElement>(null);
     const remanejTomRef       = useRef<any>(null);
+
+    // Confirmação de ação (modal genérico)
+    const [confirmAction, setConfirmAction] = useState<{ title: string; description: string; action: () => void } | null>(null);
 
     // Aprovações
     const [aprovacoes, setAprovacoes] = useState<Array<{ id: string; usuario_id: string; usuario_nome?: string; created_at: string }>>([]);
@@ -785,7 +789,11 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                         )}
                         {(role === 'aprovador' || role === 'admin') && !aprovacoes.some(a => a.usuario_id === currentUser?.id) && (
                             <button
-                                onClick={handleAprovar}
+                                onClick={() => setConfirmAction({
+                                    title: 'Aprovar este pedido?',
+                                    description: 'Ao aprovar, o pedido será encaminhado ao comprador para cotação. Esta ação pode ser revertida alterando o status.',
+                                    action: handleAprovar,
+                                })}
                                 className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors text-sm"
                             >
                                 <CheckCircle2 className="w-4 h-4" />
@@ -997,7 +1005,11 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                     {/* Confirmar Pedido */}
                                     <div className="px-5 py-4 border-t border-slate-200 bg-slate-50 flex justify-end">
                                         <button
-                                            onClick={handleConfirmarPedido}
+                                            onClick={() => setConfirmAction({
+                                                title: 'Confirmar pedido como Realizado?',
+                                                description: 'As quantidades atendidas do PDF serão salvas e o status mudará para "Realizado". O solicitante será notificado para confirmar o recebimento.',
+                                                action: handleConfirmarPedido,
+                                            })}
                                             disabled={processingPdf}
                                             className="flex items-center gap-2 px-5 py-2.5 bg-[#001A72] text-white text-sm font-medium rounded-lg hover:bg-[#001250] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
@@ -1016,16 +1028,6 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                         </div>
                     )}
 
-                    {/* Manual status change */}
-                    <div className="px-6 py-4 border-t border-slate-100 flex flex-wrap gap-2 items-center">
-                        <span className="text-xs text-slate-400">Alterar status manualmente:</span>
-                        {STEPS.filter(s => s !== status).map(s => (
-                            <button key={s} onClick={() => handleChangeStatus(s)}
-                                className="text-xs px-3 py-1.5 border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 transition-colors">
-                                Marcar como {s}
-                            </button>
-                        ))}
-                    </div>
                 </div>
             )}
 
@@ -1296,13 +1298,50 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                     )}
                     {allReceptionSet && <span />}
                     <button
-                        onClick={handleSaveRecebimento}
+                        onClick={() => setConfirmAction({
+                            title: 'Confirmar recebimento do pedido?',
+                            description: 'As quantidades recebidas serão salvas e o pedido será marcado como "Recebido".',
+                            action: handleSaveRecebimento,
+                        })}
                         disabled={saving || !allReceptionSet}
                         className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                     >
                         {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         {saving ? 'Salvando...' : 'Confirmar Recebimento'}
                     </button>
+                </div>
+            )}
+
+            {/* ── Alterar Status ──────────────────────────────────────────── */}
+            {(canComprador || role === 'aprovador') && (
+                <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div className="px-6 py-4 flex flex-wrap gap-2 items-center">
+                        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide mr-2">Alterar status:</span>
+                        {STEPS.filter(s => s !== status).map(s => {
+                            const stepIdx = STEPS.indexOf(s);
+                            const currentIdx = STEPS.indexOf(status);
+                            const isBack = stepIdx < currentIdx;
+                            return (
+                                <button
+                                    key={s}
+                                    onClick={() => setConfirmAction({
+                                        title: isBack ? `Retornar para "${s}"?` : `Avançar para "${s}"?`,
+                                        description: isBack
+                                            ? `O pedido será retornado ao status "${s}". Dados processados em etapas posteriores poderão ser resetados.`
+                                            : `O pedido será alterado para o status "${s}".`,
+                                        action: () => handleChangeStatus(s),
+                                    })}
+                                    className={`text-xs px-3 py-1.5 border rounded-md transition-colors ${
+                                        isBack
+                                            ? 'border-red-200 text-red-600 hover:bg-red-50'
+                                            : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    {isBack ? '← ' : ''}{s}
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
             )}
 
@@ -1394,6 +1433,21 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* ── Modal de Confirmação de Ação ──────────────────────────── */}
+            {confirmAction && (
+                <ConfirmModal
+                    title={confirmAction.title}
+                    description={confirmAction.description}
+                    confirmLabel="Confirmar"
+                    variant="danger"
+                    onConfirm={() => {
+                        confirmAction.action();
+                        setConfirmAction(null);
+                    }}
+                    onCancel={() => setConfirmAction(null)}
+                />
             )}
 
         </div>
