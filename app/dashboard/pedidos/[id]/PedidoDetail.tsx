@@ -135,6 +135,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
 
     // Solicitante item-level reception
     const [itemConfirmed, setItemConfirmed] = useState<Record<string, boolean>>({});
+    const [filterFornecedor, setFilterFornecedor] = useState('');
     const [itemQtyEdit,   setItemQtyEdit]   = useState<Record<string, number>>({});
 
     // Remanejamentos
@@ -1192,6 +1193,35 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                     );
                 })()}
 
+                {/* Filtro por fornecedor */}
+                {status !== 'Pendente' && status !== 'Aguardando Aprovação' && (() => {
+                    const fornecedores = [...new Set(items.map(i => i.fornecedor).filter(Boolean))] as string[];
+                    if (fornecedores.length <= 1) return null;
+                    return (
+                        <div className="px-6 py-3 border-b border-slate-100 flex items-center gap-3">
+                            <span className="text-xs font-semibold text-slate-500">Filtrar por fornecedor:</span>
+                            <select
+                                value={filterFornecedor}
+                                onChange={e => setFilterFornecedor(e.target.value)}
+                                className="px-3 py-1.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#001A72] focus:bg-white transition-colors"
+                            >
+                                <option value="">Todos ({items.length})</option>
+                                {fornecedores.sort().map(f => (
+                                    <option key={f} value={f}>{f} ({items.filter(i => i.fornecedor === f).length})</option>
+                                ))}
+                            </select>
+                            {filterFornecedor && (
+                                <button
+                                    onClick={() => setFilterFornecedor('')}
+                                    className="text-xs text-slate-400 hover:text-red-500 transition-colors flex items-center gap-1"
+                                >
+                                    <X className="w-3 h-3" /> Limpar
+                                </button>
+                            )}
+                        </div>
+                    );
+                })()}
+
                 {/* Item table */}
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-slate-100 text-sm">
@@ -1223,11 +1253,17 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-100">
-                            {items.length === 0 ? (
+                            {(() => {
+                                const displayItems = filterFornecedor
+                                    ? items.filter(i => i.fornecedor === filterFornecedor)
+                                    : items;
+                                return displayItems.length === 0 ? (
                                 <tr>
-                                    <td colSpan={12} className="px-6 py-10 text-center text-slate-500">Nenhum item encontrado.</td>
+                                    <td colSpan={12} className="px-6 py-10 text-center text-slate-500">
+                                        {filterFornecedor ? 'Nenhum item para este fornecedor.' : 'Nenhum item encontrado.'}
+                                    </td>
                                 </tr>
-                            ) : items.map((item, idx) => {
+                            ) : displayItems.map((item, idx) => {
                                 const situacao  = getSituacao(item.quantidade_atendida, item.quantidade);
                                 const recebidaVal = itemQtyEdit[item.id] ?? item.quantidade_recebida;
                                 const reception = getRecebimentoStatus(recebidaVal, item.quantidade_atendida);
@@ -1355,7 +1391,8 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                         )}
                                     </tr>
                                 );
-                            })}
+                            });
+                            })()}
                         </tbody>
                     </table>
                 </div>
