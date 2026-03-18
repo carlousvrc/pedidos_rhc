@@ -26,6 +26,7 @@ interface PedidoItem {
     quantidade_atendida: number;
     quantidade_recebida: number;
     observacao: string;
+    fornecedor?: string;
     itens: { codigo: string; referencia: string; nome: string; tipo?: string };
 }
 
@@ -176,7 +177,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
             setPedido(supabasePedido as Pedido);
             const { data: supabaseItems } = await supabase
                 .from('pedidos_itens')
-                .select('id, item_id, quantidade, quantidade_atendida, quantidade_recebida, observacao, itens(codigo, referencia, nome, tipo)')
+                .select('id, item_id, quantidade, quantidade_atendida, quantidade_recebida, observacao, fornecedor, itens(codigo, referencia, nome, tipo)')
                 .eq('pedido_id', id);
             setItems((supabaseItems as unknown as PedidoItem[]) || []);
 
@@ -390,8 +391,10 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
         setProcessingPdf(true);
         try {
             for (const item of items) {
-                const quantidade_atendida = previewMap[item.itens.codigo]?.quantidade ?? 0;
-                await supabase.from('pedidos_itens').update({ quantidade_atendida }).eq('id', item.id);
+                const entry = previewMap[item.itens.codigo];
+                const quantidade_atendida = entry?.quantidade ?? 0;
+                const fornecedor = entry?.fornecedor || null;
+                await supabase.from('pedidos_itens').update({ quantidade_atendida, fornecedor }).eq('id', item.id);
             }
             const updateData: any = { status: 'Realizado' };
             if (previewFornecedor) updateData.fornecedor = previewFornecedor;
@@ -1201,6 +1204,9 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Tipo</th>
                                 <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Qtd Pedida</th>
                                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Remanejamento</th>
+                                {status !== 'Pendente' && status !== 'Aguardando Aprovação' && (
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Fornecedor</th>
+                                )}
                                 {status !== 'Pendente' && (
                                     <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Qtd Atendida</th>
                                 )}
@@ -1293,6 +1299,12 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                                 )}
                                             </div>
                                         </td>
+
+                                        {status !== 'Pendente' && status !== 'Aguardando Aprovação' && (
+                                            <td className="px-4 py-3.5 text-xs text-slate-600 max-w-[160px] truncate" title={item.fornecedor || ''}>
+                                                {item.fornecedor || '—'}
+                                            </td>
+                                        )}
 
                                         {status !== 'Pendente' && (
                                             <td className={`px-4 py-3.5 text-right font-semibold ${situacao === 'atendido' ? 'text-green-700' : situacao === 'parcial' ? 'text-yellow-700' : 'text-red-600'}`}>
