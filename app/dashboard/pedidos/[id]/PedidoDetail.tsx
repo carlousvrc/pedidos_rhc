@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { mockPedidos, mockPedidosItens, mockItens } from '@/lib/mockData';
 import type { Usuario } from '@/lib/auth';
 import {
-    ChevronRight, Download, Save, Upload, RefreshCw,
+    ChevronRight, Download, Save, Upload, RefreshCw, Trash2,
     CheckCircle2, Pencil, FileText, X, ArrowRightLeft, Clock,
 } from 'lucide-react';
 import ConfirmModal from '@/app/components/ConfirmModal';
@@ -136,6 +136,12 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     // Solicitante item-level reception
     const [itemConfirmed, setItemConfirmed] = useState<Record<string, boolean>>({});
     const [filterFornecedor, setFilterFornecedor] = useState('');
+
+    // Inline editing
+    const [editing, setEditing] = useState(false);
+    const [editQty, setEditQty] = useState<Record<string, number>>({});
+    const [editDeleted, setEditDeleted] = useState<Set<string>>(new Set());
+    const [editSaving, setEditSaving] = useState(false);
     const [itemQtyEdit,   setItemQtyEdit]   = useState<Record<string, number>>({});
 
     // Remanejamentos
@@ -722,6 +728,75 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
         return 'nao_recebido';
     }
 
+    // ── Inline editing ────────────────────────────────────────────────────────
+
+    function startEditing() {
+        const qtyMap: Record<string, number> = {};
+        for (const item of items) qtyMap[item.id] = item.quantidade;
+        setEditQty(qtyMap);
+        setEditDeleted(new Set());
+        setEditing(true);
+    }
+
+    function cancelEditing() {
+        setEditing(false);
+        setEditQty({});
+        setEditDeleted(new Set());
+    }
+
+    async function saveEditing() {
+        setEditSaving(true);
+        try {
+            const alteracoes: Array<{
+                pedido_id: string; usuario_id: string | null; usuario_nome: string;
+                tipo: string; item_nome: string; item_codigo: string;
+                valor_anterior: string | null; valor_novo: string | null;
+            }> = [];
+            const userName = currentUser?.nome || '—';
+            const userId = currentUser?.id || null;
+
+            // Process deletions
+            for (const itemId of editDeleted) {
+                const item = items.find(i => i.id === itemId);
+                if (item) {
+                    await supabase.from('pedidos_itens').delete().eq('id', itemId);
+                    alteracoes.push({
+                        pedido_id: id, usuario_id: userId, usuario_nome: userName,
+                        tipo: 'item_removido', item_nome: item.itens.nome, item_codigo: item.itens.codigo,
+                        valor_anterior: String(item.quantidade), valor_novo: null,
+                    });
+                }
+            }
+
+            // Process quantity changes
+            for (const item of items) {
+                if (editDeleted.has(item.id)) continue;
+                const newQty = editQty[item.id];
+                if (newQty !== undefined && newQty !== item.quantidade) {
+                    await supabase.from('pedidos_itens').update({ quantidade: newQty }).eq('id', item.id);
+                    alteracoes.push({
+                        pedido_id: id, usuario_id: userId, usuario_nome: userName,
+                        tipo: 'quantidade_alterada', item_nome: item.itens.nome, item_codigo: item.itens.codigo,
+                        valor_anterior: String(item.quantidade), valor_novo: String(newQty),
+                    });
+                }
+            }
+
+            if (alteracoes.length > 0) {
+                await supabase.from('pedido_alteracoes').insert(alteracoes);
+            }
+
+            setEditing(false);
+            setEditQty({});
+            setEditDeleted(new Set());
+            await loadData();
+        } catch (err) {
+            console.error('Erro ao salvar edição:', err);
+        } finally {
+            setEditSaving(false);
+        }
+    }
+
     // ── Render ────────────────────────────────────────────────────────────────
 
     if (loading) {
@@ -761,11 +836,34 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                         <div className="flex items-center gap-3 mb-3">
                             <h1 className="text-2xl font-bold text-slate-900">Pedido #{pedido.numero_pedido}</h1>
                             <StatusBadge status={status} />
-                            {canEdit && (
-                                <Link href={`/dashboard/pedidos/${pedido.id}/editar`}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors">
+                            {canEdit && !editing && (
+                                <button
+                                    onClick={startEditing}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
+                                >
                                     <Pencil className="w-3.5 h-3.5" /> Editar
-                                </Link>
+                                </button>
+                            )}
+                            {editing && (
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setConfirmAction({
+                                            title: 'Salvar alterações?',
+                                            description: 'As alterações de quantidade e exclusões serão salvas no pedido.',
+                                            action: saveEditing,
+                                        })}
+                                        disabled={editSaving}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors"
+                                    >
+                                        <Save className="w-3.5 h-3.5" /> Salvar
+                                    </button>
+                                    <button
+                                        onClick={cancelEditing}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
+                                    >
+                                        <X className="w-3.5 h-3.5" /> Cancelar
+                                    </button>
+                                </div>
                             )}
                             {updating && (
                                 <span className="flex items-center gap-1 text-xs text-slate-400">
@@ -833,13 +931,36 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                         )}
                         {(role === 'aprovador' || role === 'admin') && !aprovacoes.some(a => a.usuario_id === currentUser?.id) && (
                             <div className="flex items-center gap-3">
-                                <Link
-                                    href={`/dashboard/pedidos/${pedido.id}/editar`}
-                                    className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 text-white rounded-lg font-medium hover:bg-amber-600 transition-colors text-sm"
-                                >
-                                    <Pencil className="w-4 h-4" />
-                                    Editar Itens / Quantidades
-                                </Link>
+                                {!editing && (
+                                    <button
+                                        onClick={startEditing}
+                                        className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 text-white rounded-lg font-medium hover:bg-amber-600 transition-colors text-sm"
+                                    >
+                                        <Pencil className="w-4 h-4" />
+                                        Editar Itens / Quantidades
+                                    </button>
+                                )}
+                                {editing && (
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => setConfirmAction({
+                                                title: 'Salvar alterações?',
+                                                description: 'As alterações de quantidade e exclusões serão salvas no pedido.',
+                                                action: saveEditing,
+                                            })}
+                                            disabled={editSaving}
+                                            className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors text-sm"
+                                        >
+                                            <Save className="w-4 h-4" /> Salvar Alterações
+                                        </button>
+                                        <button
+                                            onClick={cancelEditing}
+                                            className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-600 rounded-lg font-medium hover:bg-slate-200 transition-colors text-sm"
+                                        >
+                                            <X className="w-4 h-4" /> Cancelar
+                                        </button>
+                                    </div>
+                                )}
                                 <button
                                     onClick={() => setConfirmAction({
                                         title: 'Aprovar este pedido?',
@@ -1261,6 +1382,9 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                 {status === 'Recebido' && (
                                     <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Qtd Recebida</th>
                                 )}
+                                {editing && (
+                                    <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase w-10"></th>
+                                )}
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-100">
@@ -1274,7 +1398,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                         {filterFornecedor ? 'Nenhum item para este fornecedor.' : 'Nenhum item encontrado.'}
                                     </td>
                                 </tr>
-                            ) : displayItems.map((item, idx) => {
+                            ) : displayItems.filter(item => !editDeleted.has(item.id)).map((item, idx) => {
                                 const situacao  = getSituacao(item.quantidade_atendida, item.quantidade);
                                 const recebidaVal = itemQtyEdit[item.id] ?? item.quantidade_recebida;
                                 const reception = getRecebimentoStatus(recebidaVal, item.quantidade_atendida);
@@ -1300,7 +1424,17 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
 
                                         <td className="px-4 py-3.5 text-slate-800 font-medium max-w-xs truncate">{item.itens.nome}</td>
                                         <td className="px-4 py-3.5 text-slate-500 font-mono">{item.itens.codigo}</td>
-                                        <td className="px-4 py-3.5 text-right font-semibold text-slate-900">{item.quantidade}</td>
+                                        <td className="px-4 py-3.5 text-right font-semibold text-slate-900">
+                                            {editing ? (
+                                                <input
+                                                    type="number"
+                                                    min={1}
+                                                    value={editQty[item.id] ?? item.quantidade}
+                                                    onChange={e => setEditQty(p => ({ ...p, [item.id]: parseInt(e.target.value) || 0 }))}
+                                                    className="w-20 border border-blue-300 rounded px-2 py-1 text-xs text-right font-semibold focus:outline-none focus:ring-2 focus:ring-[#001A72] bg-blue-50"
+                                                />
+                                            ) : item.quantidade}
+                                        </td>
 
                                         {/* Remanejamento info */}
                                         <td className="px-4 py-3.5">
@@ -1403,6 +1537,19 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                         {status === 'Recebido' && (
                                             <td className="px-4 py-3.5 text-right font-semibold text-slate-700">
                                                 {item.quantidade_recebida}
+                                            </td>
+                                        )}
+
+                                        {/* Delete button — inline editing */}
+                                        {editing && (
+                                            <td className="px-4 py-3.5 text-center">
+                                                <button
+                                                    onClick={() => setEditDeleted(p => new Set(p).add(item.id))}
+                                                    className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                                    title="Remover item"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
                                             </td>
                                         )}
                                     </tr>
