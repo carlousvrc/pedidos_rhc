@@ -339,12 +339,24 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
         }
     }
 
-    function handleFilesChange(files: File[]) {
-        setPdfFiles(files);
+    function handleFilesChange(newFiles: File[]) {
+        const updated = [...pdfFiles, ...newFiles];
+        setPdfFiles(updated);
         setPdfError('');
         setPreviewBionexo(null);
         setPreviewFornecedor('');
-        processPdfFiles(files);
+        processPdfFiles(updated);
+    }
+
+    function handleRemovePdf(index: number) {
+        const updated = pdfFiles.filter((_, i) => i !== index);
+        setPdfFiles(updated);
+        setPdfError('');
+        setPreviewBionexo(null);
+        setPreviewFornecedor('');
+        if (updated.length > 0) {
+            processPdfFiles(updated);
+        }
     }
 
     // ── Preview comparison (before confirming) ────────────────────────────────
@@ -929,34 +941,49 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                         </div>
                                     </div>
 
-                                    {/* Drop zone */}
+                                    {/* Attached files list */}
+                                    {pdfFiles.length > 0 && (
+                                        <div className="space-y-2">
+                                            {pdfFiles.map((f, i) => (
+                                                <div key={i} className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-[#001A72]/20 rounded-lg">
+                                                    <FileText className="w-4 h-4 text-[#001A72] shrink-0" />
+                                                    <span className="text-xs font-medium text-[#001A72] truncate flex-1">{f.name}</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemovePdf(i)}
+                                                        className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors shrink-0"
+                                                        title="Remover arquivo"
+                                                    >
+                                                        <X className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Add more / first upload button */}
                                     <div
-                                        className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${pdfFiles.length > 0 ? 'border-[#001A72] bg-blue-50' : 'border-slate-200 hover:border-[#001A72] hover:bg-slate-100'}`}
+                                        className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors border-slate-200 hover:border-[#001A72] hover:bg-slate-100"
                                         onClick={() => !processingPdf && fileRef.current?.click()}
                                     >
                                         {processingPdf ? (
                                             <div className="flex flex-col items-center gap-2">
                                                 <RefreshCw className="w-5 h-5 text-[#001A72] animate-spin" />
-                                                <p className="text-xs text-slate-500">Processando PDF...</p>
-                                            </div>
-                                        ) : pdfFiles.length > 0 ? (
-                                            <div className="space-y-1">
-                                                {pdfFiles.map((f, i) => (
-                                                    <div key={i} className="flex items-center justify-center gap-1.5">
-                                                        <FileText className="w-3.5 h-3.5 text-[#001A72] shrink-0" />
-                                                        <p className="text-xs font-medium text-[#001A72] truncate">{f.name}</p>
-                                                    </div>
-                                                ))}
-                                                <p className="text-[11px] text-slate-400 mt-1">{pdfFiles.length} arquivo(s) · clique para trocar</p>
+                                                <p className="text-xs text-slate-500">Processando PDFs...</p>
                                             </div>
                                         ) : (
                                             <div>
                                                 <Upload className="w-5 h-5 mx-auto mb-1.5 text-slate-300" />
-                                                <p className="text-xs text-slate-400">Clique para selecionar PDFs</p>
+                                                <p className="text-xs text-slate-400">
+                                                    {pdfFiles.length > 0 ? 'Clique para anexar mais PDFs' : 'Clique para selecionar PDFs'}
+                                                </p>
                                             </div>
                                         )}
                                         <input ref={fileRef} type="file" accept=".pdf" multiple className="hidden"
-                                            onChange={e => handleFilesChange(Array.from(e.target.files || []))} />
+                                            onChange={e => {
+                                                handleFilesChange(Array.from(e.target.files || []));
+                                                e.target.value = '';
+                                            }} />
                                     </div>
                                     {pdfError && <p className="text-xs text-red-600">{pdfError}</p>}
                                 </div>
