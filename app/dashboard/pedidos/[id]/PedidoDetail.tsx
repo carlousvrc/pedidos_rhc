@@ -641,22 +641,6 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                 });
             }
 
-            // Check if ALL items now have remanejamentos → change status
-            if (pedido?.status === 'Pendente') {
-                const allItemIds = items.map(i => i.id);
-                const { data: allRems } = await supabase
-                    .from('remanejamentos')
-                    .select('pedido_item_origem_id')
-                    .in('pedido_item_origem_id', allItemIds);
-                const remanejadoIds = new Set((allRems || []).map(r => r.pedido_item_origem_id));
-                // Include the one we just created
-                remanejadoIds.add(remanejModalItem.id);
-                const allRemanejados = allItemIds.every(id => remanejadoIds.has(id));
-                if (allRemanejados) {
-                    await supabase.from('pedidos').update({ status: 'Em Cotação' }).eq('id', id);
-                }
-            }
-
             closeRemanejModal();
             await loadData();
         } catch (err) {
