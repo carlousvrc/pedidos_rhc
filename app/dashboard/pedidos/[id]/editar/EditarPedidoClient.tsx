@@ -134,6 +134,14 @@ export default function EditarPedidoClient({ currentUser, pedido, pedidoItens }:
 
     const removeItem = (id: string) => setSelectedItens(prev => prev.filter(i => i.id !== id));
 
+    // Build a map of original items for change detection
+    const originalMap = useRef<Map<string, { nome: string; codigo: string; quantidade: number }>>(
+        new Map(pedidoItens.map((pi: any) => [
+            pi.itens.id,
+            { nome: pi.itens.nome, codigo: pi.itens.codigo, quantidade: pi.quantidade },
+        ]))
+    );
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedUnidade || selectedItens.length === 0) {
@@ -142,6 +150,51 @@ export default function EditarPedidoClient({ currentUser, pedido, pedidoItens }:
         }
         setIsSubmitting(true);
         try {
+            // Detect changes
+            const alteracoes: Array<{
+                pedido_id: string;
+                usuario_id: string | null;
+                usuario_nome: string;
+                tipo: string;
+                item_nome: string;
+                item_codigo: string;
+                valor_anterior: string | null;
+                valor_novo: string | null;
+            }> = [];
+            const userName = currentUser?.nome || '—';
+            const userId = currentUser?.id || null;
+
+            const newMap = new Map(selectedItens.map(i => [i.id, i]));
+
+            // Check removed items
+            for (const [itemId, orig] of originalMap.current.entries()) {
+                if (!newMap.has(itemId)) {
+                    alteracoes.push({
+                        pedido_id: pedido.id, usuario_id: userId, usuario_nome: userName,
+                        tipo: 'item_removido', item_nome: orig.nome, item_codigo: orig.codigo,
+                        valor_anterior: String(orig.quantidade), valor_novo: null,
+                    });
+                }
+            }
+
+            // Check added and quantity-changed items
+            for (const item of selectedItens) {
+                const orig = originalMap.current.get(item.id);
+                if (!orig) {
+                    alteracoes.push({
+                        pedido_id: pedido.id, usuario_id: userId, usuario_nome: userName,
+                        tipo: 'item_adicionado', item_nome: item.nome, item_codigo: item.codigo,
+                        valor_anterior: null, valor_novo: String(item.quantidade),
+                    });
+                } else if (orig.quantidade !== item.quantidade) {
+                    alteracoes.push({
+                        pedido_id: pedido.id, usuario_id: userId, usuario_nome: userName,
+                        tipo: 'quantidade_alterada', item_nome: item.nome, item_codigo: item.codigo,
+                        valor_anterior: String(orig.quantidade), valor_novo: String(item.quantidade),
+                    });
+                }
+            }
+
             // Update pedido unidade
             await supabase.from('pedidos').update({ unidade_id: selectedUnidade }).eq('id', pedido.id);
 
@@ -150,6 +203,11 @@ export default function EditarPedidoClient({ currentUser, pedido, pedidoItens }:
             await supabase.from('pedidos_itens').insert(
                 selectedItens.map(item => ({ pedido_id: pedido.id, item_id: item.id, quantidade: item.quantidade }))
             );
+
+            // Save change log
+            if (alteracoes.length > 0) {
+                await supabase.from('pedido_alteracoes').insert(alteracoes);
+            }
 
             window.location.href = `/dashboard/pedidos/${pedido.id}`;
         } catch (error: any) {

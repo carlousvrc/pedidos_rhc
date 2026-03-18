@@ -9,8 +9,9 @@ export default async function EditarPedidoPage({ params }: { params: Promise<{ i
     const { id } = await params;
     const currentUser = await getCurrentUser();
 
-    // Apenas admins com módulo usuários podem editar
-    if (currentUser?.permissoes?.modulos?.usuarios !== true) {
+    // Admins, aprovadores e usuários com módulo usuários podem editar
+    const canEdit = currentUser?.permissoes?.modulos?.usuarios === true || currentUser?.role === 'aprovador';
+    if (!canEdit) {
         redirect(`/dashboard/pedidos/${id}`);
     }
 

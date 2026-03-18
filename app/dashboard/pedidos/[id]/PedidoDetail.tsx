@@ -149,6 +149,13 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     // Aprovações
     const [aprovacoes, setAprovacoes] = useState<Array<{ id: string; usuario_id: string; usuario_nome?: string; created_at: string }>>([]);
 
+    // Alterações (change log)
+    const [alteracoes, setAlteracoes] = useState<Array<{
+        id: string; tipo: string; item_nome: string; item_codigo: string;
+        valor_anterior: string | null; valor_novo: string | null;
+        usuario_nome: string; created_at: string;
+    }>>([]);
+
     const fileRef = useRef<HTMLInputElement>(null);
     const role    = currentUser?.role ?? 'solicitante';
 
@@ -225,6 +232,14 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                 aprsEnriched.push({ ...a, usuario_nome: usr?.nome || '—' });
             }
             setAprovacoes(aprsEnriched);
+
+            // Load alteracoes (change log)
+            const { data: alts } = await supabase
+                .from('pedido_alteracoes')
+                .select('id, tipo, item_nome, item_codigo, valor_anterior, valor_novo, usuario_nome, created_at')
+                .eq('pedido_id', id)
+                .order('created_at', { ascending: false });
+            setAlteracoes(alts || []);
 
             setLoading(false);
             return;
@@ -674,7 +689,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
 
     const canComprador  = role === 'comprador' || role === 'admin';
     const canSolicitante = role === 'solicitante' || role === 'admin';
-    const canEdit       = currentUser?.permissoes?.modulos?.usuarios === true;
+    const canEdit       = currentUser?.permissoes?.modulos?.usuarios === true || role === 'aprovador';
     const status        = pedido.status;
 
     const allReceptionSet = items.length > 0 && items.every(i => itemConfirmed[i.id] === true);
@@ -786,6 +801,50 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                         {role === 'solicitante' && (
                             <p className="text-sm text-yellow-700">Aguarde a aprovação dos responsáveis para que o pedido seja encaminhado ao comprador.</p>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* ── Alterações feitas no pedido ─────────────────────────────── */}
+            {alteracoes.length > 0 && (
+                <div className="bg-white rounded-xl shadow-sm border border-orange-200 overflow-hidden">
+                    <div className="px-6 py-4 border-b border-orange-100 bg-orange-50 flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-orange-200 flex items-center justify-center shrink-0">
+                            <Pencil className="w-5 h-5 text-orange-800" />
+                        </div>
+                        <div>
+                            <h2 className="text-sm font-bold text-orange-900">Alterações no Pedido</h2>
+                            <p className="text-xs text-orange-700 mt-0.5">Este pedido foi modificado após a criação original.</p>
+                        </div>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                        {alteracoes.map(alt => (
+                            <div key={alt.id} className="px-6 py-3 flex items-start gap-3">
+                                <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-white text-xs font-bold ${
+                                    alt.tipo === 'item_removido' ? 'bg-red-500' :
+                                    alt.tipo === 'item_adicionado' ? 'bg-green-500' :
+                                    'bg-amber-500'
+                                }`}>
+                                    {alt.tipo === 'item_removido' ? '−' : alt.tipo === 'item_adicionado' ? '+' : '~'}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm text-slate-800">
+                                        {alt.tipo === 'item_removido' && (
+                                            <><span className="font-semibold text-red-700">Removido:</span> {alt.item_nome} {alt.item_codigo && <span className="text-slate-400 text-xs">(Cód: {alt.item_codigo})</span>} — era {alt.valor_anterior} un.</>
+                                        )}
+                                        {alt.tipo === 'item_adicionado' && (
+                                            <><span className="font-semibold text-green-700">Adicionado:</span> {alt.item_nome} {alt.item_codigo && <span className="text-slate-400 text-xs">(Cód: {alt.item_codigo})</span>} — {alt.valor_novo} un.</>
+                                        )}
+                                        {alt.tipo === 'quantidade_alterada' && (
+                                            <><span className="font-semibold text-amber-700">Quantidade alterada:</span> {alt.item_nome} {alt.item_codigo && <span className="text-slate-400 text-xs">(Cód: {alt.item_codigo})</span>} — de {alt.valor_anterior} para {alt.valor_novo} un.</>
+                                        )}
+                                    </p>
+                                    <p className="text-[11px] text-slate-400 mt-0.5">
+                                        por {alt.usuario_nome} em {new Date(alt.created_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </div>
             )}
