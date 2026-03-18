@@ -400,6 +400,34 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
             const updateData: any = { status: 'Realizado' };
             if (previewFornecedor) updateData.fornecedor = previewFornecedor;
             await supabase.from('pedidos').update(updateData).eq('id', id);
+
+            // Propagar quantidade_atendida para itens transferidos (remanejamentos)
+            // Quando este pedido é realizado, os itens que serão transferidos
+            // para outros pedidos devem ter o quantidade_atendida atualizado no destino
+            for (const rem of remanejamentosOut) {
+                // Encontrar o item de destino no pedido destino pelo item_id
+                const { data: destItem } = await supabase
+                    .from('pedidos_itens')
+                    .select('id, quantidade_atendida')
+                    .eq('pedido_id', rem.pedido_destino_id)
+                    .eq('item_id', rem.item_id)
+                    .maybeSingle();
+
+                if (destItem) {
+                    // Buscar fornecedor do item origem
+                    const origemItem = items.find(i => i.id === rem.pedido_item_origem_id);
+                    const origemEntry = origemItem ? previewMap[origemItem.itens.codigo] : null;
+                    const destFornecedor = origemEntry?.fornecedor || null;
+
+                    await supabase.from('pedidos_itens')
+                        .update({
+                            quantidade_atendida: rem.quantidade,
+                            ...(destFornecedor ? { fornecedor: destFornecedor } : {}),
+                        })
+                        .eq('id', destItem.id);
+                }
+            }
+
             await loadData();
             setPdfFiles([]);
             setPreviewBionexo(null);
