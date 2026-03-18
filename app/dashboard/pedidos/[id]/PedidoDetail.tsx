@@ -1334,6 +1334,12 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                                         </span>
                                                     ))
                                                 }
+                                                {/* Item recebido via transferência — mostra quando quantidade_atendida > 0 e pedido ainda Pendente */}
+                                                {(status === 'Pendente' || status === 'Aguardando Aprovação') && item.quantidade_atendida > 0 && (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-green-100 text-green-700">
+                                                        <CheckCircle2 className="w-3 h-3" /> Realizado na origem ({item.quantidade_atendida} un.)
+                                                    </span>
+                                                )}
                                                 {/* Remanejar button for comprador — hide if already remanejado */}
                                                 {canComprador && (status === 'Pendente' || status === 'Em Cotação') && remanejamentosOut.filter(r => r.pedido_item_origem_id === item.id).length === 0 && (
                                                     <button
