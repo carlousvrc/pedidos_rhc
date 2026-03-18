@@ -185,7 +185,7 @@ export default function NovoPedidoClient({ currentUser }: Props) {
                 .insert({
                     numero_pedido: numeroPedido,
                     unidade_id: isUuid(selectedUnidade) ? selectedUnidade : null,
-                    status: 'Pendente',
+                    status: 'Aguardando Aprovação',
                     usuario_id: isUuid(currentUser?.id) ? currentUser!.id : null,
                 })
                 .select()

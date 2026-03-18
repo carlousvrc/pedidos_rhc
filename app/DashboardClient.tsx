@@ -17,6 +17,7 @@ const hasRealId = (id?: string | null) => !!id && UUID_RE.test(id);
 
 function getStatusBadge(status: string) {
     switch (status) {
+        case 'Aguardando Aprovação': return 'bg-yellow-100 text-yellow-800';
         case 'Pendente':   return 'bg-orange-100 text-orange-800';
         case 'Em Cotação': return 'bg-amber-100 text-amber-800';
         case 'Realizado':  return 'bg-blue-100 text-[#001A72]';
@@ -77,6 +78,19 @@ async function fetchPedidos(currentUser: Usuario | null): Promise<any[]> {
         return Array.from(merged.values()).sort((a, b) =>
             new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
+    }
+
+    const role = currentUser?.role;
+    // Compradores should not see orders awaiting approval
+    if (role === 'comprador') {
+        const { data, error } = await supabase
+            .from('pedidos')
+            .select('id, numero_pedido, status, created_at, unidades(nome), usuario_id, usuarios(nome)')
+            .neq('status', 'Aguardando Aprovação')
+            .order('created_at', { ascending: false })
+            .limit(200);
+        if (error) console.error('fetchPedidos error:', error.message);
+        return data ?? [];
     }
 
     const { data, error } = await supabase
@@ -196,6 +210,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
     }, [pedidos, filterNumero, filterUnidade, filterData, filterStatus]);
 
     const totalPedidos = pedidos.length;
+    const aguardandoAprovacao = pedidos.filter((p: any) => p.status === 'Aguardando Aprovação').length;
     const pendentes  = pedidos.filter((p: any) => p.status?.toLowerCase() === 'pendente').length;
     const emCotacao  = pedidos.filter((p: any) => p.status === 'Em Cotação').length;
     const realizados = pedidos.filter((p: any) => p.status?.toLowerCase() === 'realizado').length;
@@ -272,8 +287,13 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                             </Link>
                         )}
                         {currentUser?.permissoes?.modulos?.transferencias !== false && (
-                            <Link href="/dashboard/transferencias" className="px-3 py-1.5 rounded-md text-xs font-medium text-white/80 hover:bg-[#001250] hover:text-white transition-colors">
+                            <Link href="/dashboard/transferencias" className="relative px-3 py-1.5 rounded-md text-xs font-medium text-white/80 hover:bg-[#001250] hover:text-white transition-colors">
                                 Transferências
+                                {pendingTransfers.length > 0 && (
+                                    <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white px-1 animate-pulse">
+                                        {pendingTransfers.length}
+                                    </span>
+                                )}
                             </Link>
                         )}
                         {currentUser?.permissoes?.modulos?.relatorios && (
@@ -317,7 +337,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
         <div className="max-w-[1400px] mx-auto space-y-6">
 
             {/* Status Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
                 <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
                     <div className="flex items-center justify-between mb-3">
                         <div className="p-2 bg-blue-50 text-[#001A72] rounded-lg">
@@ -331,6 +351,22 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                         <div className="h-1.5 rounded-full bg-[#001A72]" style={{ width: '100%' }} />
                     </div>
                 </div>
+
+                {aguardandoAprovacao > 0 && (
+                    <div className="bg-white rounded-xl shadow-sm border border-yellow-200 p-5">
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="p-2 bg-yellow-50 text-yellow-600 rounded-lg">
+                                <Clock className="w-5 h-5" />
+                            </div>
+                            <span className="text-3xl font-bold text-slate-900">{aguardandoAprovacao}</span>
+                        </div>
+                        <p className="text-sm font-medium text-slate-700">Aguardando Aprovação</p>
+                        <p className="text-xs text-slate-400 mt-0.5">Pendente de aprovação</p>
+                        <div className="mt-3 h-1.5 rounded-full bg-slate-100">
+                            <div className="h-1.5 rounded-full bg-yellow-400 transition-all" style={{ width: totalPedidos ? `${(aguardandoAprovacao / totalPedidos) * 100}%` : '0%' }} />
+                        </div>
+                    </div>
+                )}
 
                 <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
                     <div className="flex items-center justify-between mb-3">
@@ -410,12 +446,17 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                     </Link>
                 )}
                 {currentUser?.permissoes?.modulos?.transferencias !== false && (
-                    <Link href="/dashboard/transferencias" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-purple-300 hover:shadow-md transition-all group">
+                    <Link href="/dashboard/transferencias" className="relative flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-purple-300 hover:shadow-md transition-all group">
+                        {pendingTransfers.length > 0 && (
+                            <span className="absolute top-3 right-3 min-w-[22px] h-[22px] flex items-center justify-center rounded-full bg-red-500 text-[11px] font-bold text-white px-1.5 animate-pulse shadow-sm">
+                                {pendingTransfers.length}
+                            </span>
+                        )}
                         <div className="p-2.5 bg-purple-50 text-purple-600 rounded-lg w-fit group-hover:bg-purple-600 group-hover:text-white transition-colors">
                             <ArrowRightLeft className="w-5 h-5" />
                         </div>
                         <p className="text-sm font-semibold text-slate-800 mt-3">Transferências</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">Remanejamentos</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">{pendingTransfers.length > 0 ? `${pendingTransfers.length} a receber` : 'Remanejamentos'}</p>
                     </Link>
                 )}
                 {currentUser?.permissoes?.modulos?.relatorios && (
@@ -540,6 +581,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                             className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#001A72] focus:bg-white transition-colors"
                         >
                             <option value="">Todos os status</option>
+                            <option value="Aguardando Aprovação">Aguardando Aprovação</option>
                             <option value="Pendente">Pendente</option>
                             <option value="Em Cotação">Em Cotação</option>
                             <option value="Realizado">Realizado</option>

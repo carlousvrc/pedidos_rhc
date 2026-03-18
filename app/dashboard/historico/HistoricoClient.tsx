@@ -21,9 +21,10 @@ interface Props {
     canDelete?: boolean;
 }
 
-const STATUS_TABS = ['Todos', 'Pendente', 'Realizado', 'Recebido'] as const;
+const STATUS_TABS = ['Todos', 'Aguardando Aprovação', 'Pendente', 'Realizado', 'Recebido'] as const;
 
 function getStatusBadge(status: string) {
+    if (status === 'Aguardando Aprovação') return 'bg-yellow-100 text-yellow-800';
     switch (status?.toLowerCase()) {
         case 'pendente':  return 'bg-orange-100 text-orange-800';
         case 'realizado': return 'bg-blue-100 text-[#001A72]';
@@ -33,6 +34,7 @@ function getStatusBadge(status: string) {
 }
 
 function getRowAccent(status: string) {
+    if (status === 'Aguardando Aprovação') return 'border-l-4 border-l-yellow-400';
     if (status?.toLowerCase() === 'pendente') return 'border-l-4 border-l-orange-400';
     if (status?.toLowerCase() === 'realizado') return 'border-l-4 border-l-[#001A72]';
     if (status?.toLowerCase() === 'recebido') return 'border-l-4 border-l-green-500';
@@ -55,6 +57,7 @@ export default function HistoricoClient({ pedidos, scope, canDelete }: Props) {
 
     const counts = useMemo(() => ({
         Todos:    lista.length,
+        'Aguardando Aprovação': lista.filter(p => p.status === 'Aguardando Aprovação').length,
         Pendente: lista.filter(p => p.status?.toLowerCase() === 'pendente').length,
         Realizado:lista.filter(p => p.status?.toLowerCase() === 'realizado').length,
         Recebido: lista.filter(p => p.status?.toLowerCase() === 'recebido').length,

@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { mockUsuarios, mockUnidades } from '@/lib/mockData';
 import ConfirmModal from '@/app/components/ConfirmModal';
 
-type Role = 'admin' | 'comprador' | 'solicitante';
+type Role = 'admin' | 'comprador' | 'solicitante' | 'aprovador';
 
 interface Modulos {
     pedidos: boolean;
@@ -57,6 +57,7 @@ function getRoleBadge(role: string) {
         case 'admin': return 'bg-purple-100 text-purple-800';
         case 'comprador': return 'bg-blue-100 text-[#001A72]';
         case 'solicitante': return 'bg-green-100 text-green-800';
+        case 'aprovador': return 'bg-yellow-100 text-yellow-800';
         default: return 'bg-slate-100 text-slate-700';
     }
 }
@@ -147,7 +148,7 @@ export default function UsuariosPage() {
     function handleScopeChange(scope: 'operador' | 'admin') {
         if (scope === 'admin') {
             setForm(f => ({
-                ...f, scope, role: 'admin',
+                ...f, scope, role: f.role === 'solicitante' ? 'admin' : f.role,
                 modulos: { pedidos: true, historico: true, itens: true, relatorios: true, bionexo: true, usuarios: true, transferencias: true },
             }));
         } else {
@@ -413,6 +414,32 @@ export default function UsuariosPage() {
                                         {unidades.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
                                     </select>
                                 </div>
+                            </div>
+
+                            {/* Nível / Role */}
+                            <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1.5">Nível de Acesso</label>
+                                <select
+                                    value={form.role}
+                                    onChange={e => {
+                                        const r = e.target.value as Role;
+                                        if (r === 'aprovador') {
+                                            setForm(f => ({ ...f, role: r, scope: 'admin', modulos: { pedidos: true, historico: true, itens: false, relatorios: false, bionexo: false, usuarios: false, transferencias: false } }));
+                                        } else if (r === 'admin') {
+                                            setForm(f => ({ ...f, role: r, scope: 'admin', modulos: { pedidos: true, historico: true, itens: true, relatorios: true, bionexo: true, usuarios: true, transferencias: true } }));
+                                        } else if (r === 'comprador') {
+                                            setForm(f => ({ ...f, role: r, scope: 'admin', modulos: { pedidos: true, historico: true, itens: false, relatorios: true, bionexo: true, usuarios: false, transferencias: true } }));
+                                        } else {
+                                            setForm(f => ({ ...f, role: r, scope: 'operador', modulos: { ...DEFAULT_MODULOS } }));
+                                        }
+                                    }}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#001A72] bg-slate-50 focus:bg-white transition-all"
+                                >
+                                    <option value="solicitante">Solicitante</option>
+                                    <option value="aprovador">Aprovador</option>
+                                    <option value="comprador">Comprador</option>
+                                    <option value="admin">Administrador</option>
+                                </select>
                             </div>
 
                             {/* Visualização */}

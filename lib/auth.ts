@@ -19,7 +19,7 @@ export interface Usuario {
     id: string;
     username: string;
     nome: string;
-    role: 'admin' | 'comprador' | 'solicitante';
+    role: 'admin' | 'comprador' | 'solicitante' | 'aprovador';
     unidade_id: string | null;
     permissoes: Permissoes;
 }
@@ -54,6 +54,12 @@ function resolvePermissoes(raw: any, role: string): Permissoes {
             modulos: { pedidos: true, historico: true, itens: false, relatorios: true, bionexo: true, usuarios: false, transferencias: true },
         };
     }
+    if (role === 'aprovador') {
+        return {
+            scope: 'admin',
+            modulos: { pedidos: true, historico: true, itens: false, relatorios: false, bionexo: false, usuarios: false, transferencias: false },
+        };
+    }
     return DEFAULT_PERMISSOES;
 }
 
@@ -79,7 +85,7 @@ export async function getCurrentUser(): Promise<Usuario | null> {
                 id: user.id,
                 username: user.username,
                 nome: user.nome,
-                role: user.role as 'admin' | 'comprador' | 'solicitante',
+                role: user.role as 'admin' | 'comprador' | 'solicitante' | 'aprovador',
                 unidade_id: user.unidade_id ?? null,
                 permissoes: resolvePermissoes(user.permissoes, user.role),
             };

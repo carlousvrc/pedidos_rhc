@@ -61,12 +61,15 @@ interface PedidoOption {
     unidade_nome: string;
 }
 
-const STEPS = ['Pendente', 'Em Cotação', 'Realizado', 'Recebido'];
+const STEPS = ['Aguardando Aprovação', 'Pendente', 'Em Cotação', 'Realizado', 'Recebido'];
+
+const REQUIRED_APPROVALS = 1;
 
 // ── Small Components ───────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: string }) {
     const cls =
+        status === 'Aguardando Aprovação' ? 'bg-yellow-100 text-yellow-800' :
         status === 'Pendente'    ? 'bg-orange-100 text-orange-800' :
         status === 'Em Cotação'  ? 'bg-amber-100 text-amber-800' :
         status === 'Realizado'   ? 'bg-blue-100 text-[#001A72]' :
@@ -87,7 +90,8 @@ function StatusStepper({ status }: { status: string }) {
                 const done   = idx < currentIdx;
                 const active = idx === currentIdx;
                 const circleClass = done || active
-                    ? step === 'Pendente'    ? 'bg-orange-500 text-white border-orange-500'
+                    ? step === 'Aguardando Aprovação' ? 'bg-yellow-500 text-white border-yellow-500'
+                    : step === 'Pendente'    ? 'bg-orange-500 text-white border-orange-500'
                     : step === 'Em Cotação'  ? 'bg-amber-500 text-white border-amber-500'
                     : step === 'Realizado'   ? 'bg-[#001A72] text-white border-[#001A72]'
                     : 'bg-green-500 text-white border-green-500'
@@ -139,6 +143,9 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     const [remanejPedidos,    setRemanejPedidos]    = useState<PedidoOption[]>([]);
     const remanejSelectElRef  = useRef<HTMLSelectElement>(null);
     const remanejTomRef       = useRef<any>(null);
+
+    // Aprovações
+    const [aprovacoes, setAprovacoes] = useState<Array<{ id: string; usuario_id: string; usuario_nome?: string; created_at: string }>>([]);
 
     const fileRef = useRef<HTMLInputElement>(null);
     const role    = currentUser?.role ?? 'solicitante';
@@ -203,6 +210,19 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                 inEnriched.push({ ...r, origem_pedido_numero: origemNum, origem_unidade_nome: origemUnidade });
             }
             setRemanejamentosIn(inEnriched);
+
+            // Load aprovacoes
+            const { data: aprs } = await supabase
+                .from('aprovacoes')
+                .select('id, usuario_id, created_at')
+                .eq('pedido_id', id)
+                .order('created_at', { ascending: true });
+            const aprsEnriched = [];
+            for (const a of (aprs || [])) {
+                const { data: usr } = await supabase.from('usuarios').select('nome').eq('id', a.usuario_id).single();
+                aprsEnriched.push({ ...a, usuario_nome: usr?.nome || '—' });
+            }
+            setAprovacoes(aprsEnriched);
 
             setLoading(false);
             return;
@@ -352,8 +372,71 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     }
 
     async function handleChangeStatus(newStatus: string) {
+        const statusOrder = ['Aguardando Aprovação', 'Pendente', 'Em Cotação', 'Realizado', 'Recebido'];
+        const currentIdx = statusOrder.indexOf(pedido?.status || '');
+        const newIdx = statusOrder.indexOf(newStatus);
+
+        // When going backward to Aguardando Aprovação, clear aprovacoes
+        if (newStatus === 'Aguardando Aprovação') {
+            await supabase.from('aprovacoes').delete().eq('pedido_id', id);
+        }
+
+        // When going backward from Realizado/Recebido to an earlier status,
+        // reset quantities so the order can be properly re-processed
+        if (currentIdx >= 3 && newIdx < 3) {
+            // Reset quantidade_atendida and quantidade_recebida on all items
+            const itemIds = items.map(i => i.id);
+            for (const itemId of itemIds) {
+                await supabase.from('pedidos_itens')
+                    .update({ quantidade_atendida: 0, quantidade_recebida: 0 })
+                    .eq('id', itemId);
+            }
+            // Reset quantidade_recebida on all related remanejamentos
+            if (itemIds.length > 0) {
+                await supabase.from('remanejamentos')
+                    .update({ quantidade_recebida: 0 })
+                    .in('pedido_item_origem_id', itemIds);
+            }
+        } else if (currentIdx >= 4 && newIdx === 3) {
+            // Going back from Recebido to Realizado — reset only quantidade_recebida
+            const itemIds = items.map(i => i.id);
+            for (const itemId of itemIds) {
+                await supabase.from('pedidos_itens')
+                    .update({ quantidade_recebida: 0 })
+                    .eq('id', itemId);
+            }
+            if (itemIds.length > 0) {
+                await supabase.from('remanejamentos')
+                    .update({ quantidade_recebida: 0 })
+                    .in('pedido_item_origem_id', itemIds);
+            }
+        }
+
         await supabase.from('pedidos').update({ status: newStatus }).eq('id', id);
         await loadData();
+    }
+
+    // ── Aprovação ────────────────────────────────────────────────────────────
+
+    async function handleAprovar() {
+        if (!currentUser) return;
+        try {
+            await supabase.from('aprovacoes').insert({
+                pedido_id: id,
+                usuario_id: currentUser.id,
+            });
+            // Check if we now have enough approvals
+            const { data: allAprs } = await supabase
+                .from('aprovacoes')
+                .select('id')
+                .eq('pedido_id', id);
+            if ((allAprs?.length || 0) >= REQUIRED_APPROVALS) {
+                await supabase.from('pedidos').update({ status: 'Pendente' }).eq('id', id);
+            }
+            await loadData();
+        } catch (err) {
+            console.error('Erro ao aprovar pedido:', err);
+        }
     }
 
     // ── Remanejamento ──────────────────────────────────────────────────────────
@@ -638,8 +721,61 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                 <StatusStepper status={status} />
             </div>
 
+            {/* ── Área de Aprovação ────────────────────────────────────────── */}
+            {status === 'Aguardando Aprovação' && (
+                <div className="bg-white rounded-xl shadow-sm border-2 border-yellow-200 overflow-hidden">
+                    <div className="px-6 py-4 border-b border-yellow-100 bg-yellow-50 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-lg bg-yellow-200 flex items-center justify-center shrink-0">
+                                <Clock className="w-5 h-5 text-yellow-800" />
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-bold text-yellow-900">Aguardando Aprovação</h2>
+                                <p className="text-xs text-yellow-700 mt-0.5">
+                                    Este pedido precisa da aprovação de um responsável para seguir ao comprador.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="px-6 py-4 space-y-3">
+                        {aprovacoes.length > 0 && (
+                            <div className="space-y-2">
+                                <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Aprovações recebidas:</p>
+                                {aprovacoes.map(a => (
+                                    <div key={a.id} className="flex items-center gap-2 text-sm">
+                                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                                        <span className="font-medium text-slate-800">{a.usuario_nome}</span>
+                                        <span className="text-xs text-slate-400">
+                                            em {new Date(a.created_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {(role === 'aprovador' || role === 'admin') && !aprovacoes.some(a => a.usuario_id === currentUser?.id) && (
+                            <button
+                                onClick={handleAprovar}
+                                className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors text-sm"
+                            >
+                                <CheckCircle2 className="w-4 h-4" />
+                                Aprovar Pedido
+                            </button>
+                        )}
+                        {(role === 'aprovador' || role === 'admin') && aprovacoes.some(a => a.usuario_id === currentUser?.id) && (
+                            <p className="text-sm text-green-700 font-medium flex items-center gap-2">
+                                <CheckCircle2 className="w-4 h-4" />
+                                Você já aprovou este pedido.
+                            </p>
+                        )}
+                        {role === 'solicitante' && (
+                            <p className="text-sm text-yellow-700">Aguarde a aprovação dos responsáveis para que o pedido seja encaminhado ao comprador.</p>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* ── Área do Comprador ────────────────────────────────────────── */}
-            {canComprador && (
+            {canComprador && status !== 'Aguardando Aprovação' && (
                 <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
                     <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                         <h2 className="text-lg font-bold text-slate-800">Área do Comprador</h2>
