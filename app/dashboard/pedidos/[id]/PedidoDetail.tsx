@@ -129,7 +129,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     const [processingPdf, setProcessingPdf] = useState(false);
     const [pdfFiles,      setPdfFiles]      = useState<File[]>([]);
     const [pdfError,      setPdfError]      = useState('');
-    const [previewBionexo, setPreviewBionexo] = useState<Array<{ codigo: string; quantidade: number }> | null>(null);
+    const [previewBionexo, setPreviewBionexo] = useState<Array<{ codigo: string; quantidade: number; fornecedor: string }> | null>(null);
     const [previewFornecedor, setPreviewFornecedor] = useState('');
 
     // Solicitante item-level reception
@@ -308,7 +308,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
         setPreviewBionexo(null);
         setPreviewFornecedor('');
         try {
-            const mergedMap: Record<string, number> = {};
+            const mergedMap: Record<string, { quantidade: number; fornecedor: string }> = {};
             const fornecedores: Set<string> = new Set();
             for (const file of files) {
                 const formData = new FormData();
@@ -316,12 +316,21 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                 const res  = await fetch('/api/bionexo/convert', { method: 'POST', body: formData });
                 const json = await res.json();
                 if (!res.ok) throw new Error(`${file.name}: ${json.error || 'Erro ao processar PDF.'}`);
-                for (const it of (json.itens as Array<{ codigo: string; quantidade: number }>) ?? []) {
-                    mergedMap[it.codigo] = (mergedMap[it.codigo] || 0) + it.quantidade;
+                for (const it of (json.itens as Array<{ codigo: string; quantidade: number; fornecedor: string }>) ?? []) {
+                    if (mergedMap[it.codigo]) {
+                        mergedMap[it.codigo].quantidade += it.quantidade;
+                        if (it.fornecedor && !mergedMap[it.codigo].fornecedor) {
+                            mergedMap[it.codigo].fornecedor = it.fornecedor;
+                        } else if (it.fornecedor && mergedMap[it.codigo].fornecedor && !mergedMap[it.codigo].fornecedor.includes(it.fornecedor)) {
+                            mergedMap[it.codigo].fornecedor += `, ${it.fornecedor}`;
+                        }
+                    } else {
+                        mergedMap[it.codigo] = { quantidade: it.quantidade, fornecedor: it.fornecedor || '' };
+                    }
                 }
                 if (json.fornecedor) fornecedores.add(json.fornecedor);
             }
-            setPreviewBionexo(Object.entries(mergedMap).map(([codigo, quantidade]) => ({ codigo, quantidade })));
+            setPreviewBionexo(Object.entries(mergedMap).map(([codigo, v]) => ({ codigo, quantidade: v.quantidade, fornecedor: v.fornecedor })));
             setPreviewFornecedor(Array.from(fornecedores).join(', '));
         } catch (err: any) {
             setPdfError(err.message || 'Erro ao processar PDF.');
@@ -340,10 +349,16 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
 
     // ── Preview comparison (before confirming) ────────────────────────────────
 
-    const previewMap = useMemo<Record<string, number>>(() => {
+    const previewMap = useMemo<Record<string, { quantidade: number; fornecedor: string }>>(() => {
         if (!previewBionexo) return {};
-        const m: Record<string, number> = {};
-        for (const it of previewBionexo) m[it.codigo] = (m[it.codigo] || 0) + it.quantidade;
+        const m: Record<string, { quantidade: number; fornecedor: string }> = {};
+        for (const it of previewBionexo) {
+            if (m[it.codigo]) {
+                m[it.codigo].quantidade += it.quantidade;
+            } else {
+                m[it.codigo] = { quantidade: it.quantidade, fornecedor: it.fornecedor || '' };
+            }
+        }
         return m;
     }, [previewBionexo]);
 
@@ -351,7 +366,8 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
         if (!previewBionexo || items.length === 0) return null;
         return items.map(item => ({
             ...item,
-            preview_atendida: previewMap[item.itens.codigo] ?? 0,
+            preview_atendida: previewMap[item.itens.codigo]?.quantidade ?? 0,
+            preview_fornecedor: previewMap[item.itens.codigo]?.fornecedor ?? '',
         }));
     }, [previewBionexo, previewMap, items]);
 
@@ -362,7 +378,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
         setProcessingPdf(true);
         try {
             for (const item of items) {
-                const quantidade_atendida = previewMap[item.itens.codigo] ?? 0;
+                const quantidade_atendida = previewMap[item.itens.codigo]?.quantidade ?? 0;
                 await supabase.from('pedidos_itens').update({ quantidade_atendida }).eq('id', item.id);
             }
             const updateData: any = { status: 'Realizado' };
@@ -788,17 +804,26 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                             </div>
                         )}
                         {(role === 'aprovador' || role === 'admin') && !aprovacoes.some(a => a.usuario_id === currentUser?.id) && (
-                            <button
-                                onClick={() => setConfirmAction({
-                                    title: 'Aprovar este pedido?',
-                                    description: 'Ao aprovar, o pedido será encaminhado ao comprador para cotação. Esta ação pode ser revertida alterando o status.',
-                                    action: handleAprovar,
-                                })}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors text-sm"
-                            >
-                                <CheckCircle2 className="w-4 h-4" />
-                                Aprovar Pedido
-                            </button>
+                            <div className="flex items-center gap-3">
+                                <Link
+                                    href={`/dashboard/pedidos/${pedido.id}/editar`}
+                                    className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 text-white rounded-lg font-medium hover:bg-amber-600 transition-colors text-sm"
+                                >
+                                    <Pencil className="w-4 h-4" />
+                                    Editar Itens / Quantidades
+                                </Link>
+                                <button
+                                    onClick={() => setConfirmAction({
+                                        title: 'Aprovar este pedido?',
+                                        description: 'Ao aprovar, o pedido será encaminhado ao comprador para cotação. Esta ação pode ser revertida alterando o status.',
+                                        action: handleAprovar,
+                                    })}
+                                    className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors text-sm"
+                                >
+                                    <CheckCircle2 className="w-4 h-4" />
+                                    Aprovar Pedido
+                                </button>
+                            </div>
                         )}
                         {(role === 'aprovador' || role === 'admin') && aprovacoes.some(a => a.usuario_id === currentUser?.id) && (
                             <p className="text-sm text-green-700 font-medium flex items-center gap-2">
@@ -973,6 +998,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                                 <tr>
                                                     <th className="px-4 py-2 text-left text-xs font-bold text-slate-500 uppercase">Produto</th>
                                                     <th className="px-4 py-2 text-left text-xs font-bold text-slate-500 uppercase">Código</th>
+                                                    <th className="px-4 py-2 text-left text-xs font-bold text-slate-500 uppercase">Fornecedor</th>
                                                     <th className="px-4 py-2 text-right text-xs font-bold text-slate-500 uppercase">Pedido</th>
                                                     <th className="px-4 py-2 text-right text-xs font-bold text-slate-500 uppercase">Atendido</th>
                                                     <th className="px-4 py-2 text-right text-xs font-bold text-slate-500 uppercase">Dif.</th>
@@ -987,6 +1013,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                                         <tr key={item.id} className={sit === 'atendido' ? 'bg-green-50/40' : sit === 'parcial' ? 'bg-yellow-50/50' : 'bg-red-50/40'}>
                                                             <td className="px-4 py-2 text-slate-800 font-medium max-w-[200px] truncate">{item.itens.nome}</td>
                                                             <td className="px-4 py-2 text-slate-500 font-mono text-xs">{item.itens.codigo}</td>
+                                                            <td className="px-4 py-2 text-xs text-slate-600 max-w-[150px] truncate">{(item as any).preview_fornecedor || '—'}</td>
                                                             <td className="px-4 py-2 text-right font-semibold text-slate-800">{item.quantidade}</td>
                                                             <td className={`px-4 py-2 text-right font-semibold ${sit === 'atendido' ? 'text-green-700' : sit === 'parcial' ? 'text-yellow-700' : 'text-red-600'}`}>{item.preview_atendida}</td>
                                                             <td className={`px-4 py-2 text-right font-semibold text-xs ${diff < 0 ? 'text-red-600' : diff > 0 ? 'text-green-700' : 'text-slate-400'}`}>{diff > 0 ? `+${diff}` : diff === 0 ? '—' : diff}</td>
@@ -1265,13 +1292,18 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                                     {reception === 'parcial'      && <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-yellow-100 text-yellow-700">~ Parcial</span>}
                                                     {reception === 'nao_recebido' && <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-red-100 text-red-600">✕ Não recebido</span>}
                                                 </td>
-                                                <td className="px-4 py-3.5">
-                                                    <button
-                                                        onClick={() => setItemConfirmed(p => ({ ...p, [item.id]: !confirmed }))}
-                                                        className={`px-2.5 py-1 text-xs font-semibold rounded-md border transition-colors ${confirmed ? 'bg-green-600 text-white border-green-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-                                                    >
-                                                        {confirmed ? <><CheckCircle2 className="w-3 h-3 inline mr-1" />Confirmado</> : 'Confirmar'}
-                                                    </button>
+                                                <td className="px-4 py-3.5 text-center">
+                                                    <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={confirmed}
+                                                            onChange={() => setItemConfirmed(p => ({ ...p, [item.id]: !confirmed }))}
+                                                            className="w-4 h-4 rounded border-slate-300 text-green-600 focus:ring-green-500 cursor-pointer"
+                                                        />
+                                                        <span className={`text-xs font-semibold ${confirmed ? 'text-green-700' : 'text-slate-400'}`}>
+                                                            {confirmed ? 'Confirmado' : 'Confirmar'}
+                                                        </span>
+                                                    </label>
                                                 </td>
                                             </>
                                         )}

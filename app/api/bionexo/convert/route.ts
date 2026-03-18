@@ -160,7 +160,7 @@ function parseQty(text: string): number {
 
 // ── PDF Extraction ─────────────────────────────────────────────────────────────
 
-async function parseBionexoPdf(pdfBuffer: Buffer): Promise<{ itens: Array<{ codigo: string; quantidade: number }>; fornecedor: string }> {
+async function parseBionexoPdf(pdfBuffer: Buffer): Promise<{ itens: Array<{ codigo: string; quantidade: number; fornecedor: string }>; fornecedor: string }> {
     // Dynamic import avoids SSR / module resolution issues
     const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
 
@@ -178,7 +178,7 @@ async function parseBionexoPdf(pdfBuffer: Buffer): Promise<{ itens: Array<{ codi
     });
     const pdfDoc = await loadingTask.promise;
 
-    const results: Array<{ codigo: string; quantidade: number }> = [];
+    const results: Array<{ codigo: string; quantidade: number; fornecedor: string }> = [];
     const fornecedores: Set<string> = new Set();
     let lastColumns: Column[] | null = null;
 
@@ -264,7 +264,7 @@ async function parseBionexoPdf(pdfBuffer: Buffer): Promise<{ itens: Array<{ codi
             const fornecedor = (row['fornecedor'] ?? '').trim();
 
             if (fornecedor) fornecedores.add(fornecedor);
-            if (codigo) results.push({ codigo, quantidade });
+            if (codigo) results.push({ codigo, quantidade, fornecedor });
         }
     }
 

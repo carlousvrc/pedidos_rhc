@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Trash2, ArrowLeft, Save, Package, Download, Pencil } from 'lucide-react';
+import { Trash2, ArrowLeft, Save, Package, Download, Pencil, Upload } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import Link from 'next/link';
 import Papa from 'papaparse';
 import { mockItens, mockUnidades } from '@/lib/mockData';
@@ -170,6 +171,48 @@ export default function NovoPedidoClient({ currentUser }: Props) {
 
     const removeItem = (id: string) => setSelectedItens(prev => prev.filter(i => i.id !== id));
 
+    const excelFileRef = useRef<HTMLInputElement>(null);
+    const [importResult, setImportResult] = useState<{ found: number; notFound: string[] } | null>(null);
+
+    function handleExcelImport(file: File) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = new Uint8Array(e.target?.result as ArrayBuffer);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                const rows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+                const newItems: any[] = [];
+                const notFound: string[] = [];
+
+                for (const row of rows) {
+                    // Try to match by codigo (flexible column names)
+                    const codigo = String(row['Codigo'] || row['codigo'] || row['CODIGO'] || row['Código'] || row['código'] || '').trim();
+                    const quantidade = parseInt(row['Quantidade'] || row['quantidade'] || row['QUANTIDADE'] || row['Qtd'] || row['qtd'] || '1') || 1;
+
+                    if (!codigo) continue;
+
+                    const matched = itens.find(i => String(i.codigo).trim() === codigo);
+                    if (matched && !selectedIdsRef.current.has(matched.id)) {
+                        newItems.push({ ...matched, quantidade });
+                        selectedIdsRef.current.add(matched.id);
+                    } else if (!matched) {
+                        notFound.push(codigo);
+                    }
+                }
+
+                if (newItems.length > 0) {
+                    setSelectedItens(prev => [...prev, ...newItems]);
+                }
+                setImportResult({ found: newItems.length, notFound });
+            } catch (err) {
+                alert('Erro ao ler o arquivo Excel. Verifique se o formato está correto.');
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedUnidade || selectedItens.length === 0) {
@@ -269,7 +312,7 @@ export default function NovoPedidoClient({ currentUser }: Props) {
 
                         <div className="p-6 space-y-6">
 
-                            {/* TomSelect + Tipo filter */}
+                            {/* TomSelect + Tipo filter + Excel import */}
                             <div className="flex flex-col sm:flex-row gap-3">
                                 <div className="flex-1">
                                     <select ref={selectElRef} className="w-full" />
@@ -283,7 +326,48 @@ export default function NovoPedidoClient({ currentUser }: Props) {
                                     <option value="">Todos os tipos</option>
                                     {TIPOS.map(t => <option key={t} value={t}>{t}</option>)}
                                 </select>
+
+                                <button
+                                    type="button"
+                                    onClick={() => excelFileRef.current?.click()}
+                                    className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors whitespace-nowrap"
+                                >
+                                    <Upload className="w-4 h-4" />
+                                    Importar Excel
+                                </button>
+                                <input
+                                    ref={excelFileRef}
+                                    type="file"
+                                    accept=".xlsx,.xls"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) handleExcelImport(file);
+                                        e.target.value = '';
+                                    }}
+                                />
                             </div>
+
+                            {/* Import result */}
+                            {importResult && (
+                                <div className={`p-3 rounded-lg border text-sm ${importResult.notFound.length > 0 ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
+                                    <p className="font-medium text-slate-800">
+                                        {importResult.found} item(ns) importado(s) com sucesso.
+                                    </p>
+                                    {importResult.notFound.length > 0 && (
+                                        <p className="text-xs text-amber-700 mt-1">
+                                            Códigos não encontrados no catálogo: {importResult.notFound.join(', ')}
+                                        </p>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => setImportResult(null)}
+                                        className="text-xs text-slate-500 hover:text-slate-700 mt-1 underline"
+                                    >
+                                        Fechar
+                                    </button>
+                                </div>
+                            )}
 
                             {/* Selected Items List */}
                             <div>
