@@ -150,7 +150,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     const remanejTomRef       = useRef<any>(null);
 
     // Confirmação de ação (modal genérico)
-    const [confirmAction, setConfirmAction] = useState<{ title: string; description: string; action: () => void } | null>(null);
+    const [confirmAction, setConfirmAction] = useState<{ title: string; description: string; action: () => void; variant?: 'danger' | 'warning' | 'primary' } | null>(null);
 
     // Aprovações
     const [aprovacoes, setAprovacoes] = useState<Array<{ id: string; usuario_id: string; usuario_nome?: string; created_at: string }>>([]);
@@ -1231,7 +1231,6 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                 {status !== 'Pendente' && <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Situação</th>}
                                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Produto</th>
                                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Código</th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Tipo</th>
                                 <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Qtd Pedida</th>
                                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Remanejamento</th>
                                 {status !== 'Pendente' && status !== 'Aguardando Aprovação' && (
@@ -1289,7 +1288,6 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
 
                                         <td className="px-4 py-3.5 text-slate-800 font-medium max-w-xs truncate">{item.itens.nome}</td>
                                         <td className="px-4 py-3.5 text-slate-500 font-mono">{item.itens.codigo}</td>
-                                        <td className="px-4 py-3.5 text-slate-500">{item.itens.tipo || '—'}</td>
                                         <td className="px-4 py-3.5 text-right font-semibold text-slate-900">{item.quantidade}</td>
 
                                         {/* Remanejamento info */}
@@ -1438,6 +1436,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                             ? `O pedido será retornado ao status "${s}". Dados processados em etapas posteriores poderão ser resetados.`
                                             : `O pedido será alterado para o status "${s}".`,
                                         action: () => handleChangeStatus(s),
+                                        variant: isBack ? 'danger' : 'warning',
                                     })}
                                     className={`text-xs px-3 py-1.5 border rounded-md transition-colors ${
                                         isBack
@@ -1549,7 +1548,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                     title={confirmAction.title}
                     description={confirmAction.description}
                     confirmLabel="Confirmar"
-                    variant="danger"
+                    variant={confirmAction.variant ?? 'warning'}
                     onConfirm={() => {
                         confirmAction.action();
                         setConfirmAction(null);

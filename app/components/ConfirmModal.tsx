@@ -1,19 +1,33 @@
 'use client';
 
-import { Trash2, Package } from 'lucide-react';
+import { Trash2, Package, AlertTriangle } from 'lucide-react';
 
 interface Props {
     title: string;
     description: string;
     onConfirm: () => void;
     onCancel: () => void;
-    variant?: 'danger' | 'primary';
+    variant?: 'danger' | 'primary' | 'warning';
     confirmLabel?: string;
 }
 
 export default function ConfirmModal({ title, description, onConfirm, onCancel, variant = 'danger', confirmLabel }: Props) {
-    const isPrimary = variant === 'primary';
-    const label = confirmLabel ?? (isPrimary ? 'Confirmar' : 'Excluir');
+    const label = confirmLabel ?? (variant === 'danger' ? 'Excluir' : 'Confirmar');
+
+    const iconClass =
+        variant === 'primary' ? 'bg-blue-50 text-[#001A72]' :
+        variant === 'warning' ? 'bg-amber-50 text-amber-600' :
+        'bg-red-50 text-red-500';
+
+    const btnClass =
+        variant === 'primary' ? 'bg-[#001A72] hover:bg-[#001250]' :
+        variant === 'warning' ? 'bg-amber-500 hover:bg-amber-600' :
+        'bg-red-500 hover:bg-red-600';
+
+    const icon =
+        variant === 'primary' ? <Package className="w-5 h-5" /> :
+        variant === 'warning' ? <AlertTriangle className="w-5 h-5" /> :
+        <Trash2 className="w-5 h-5" />;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -24,8 +38,8 @@ export default function ConfirmModal({ title, description, onConfirm, onCancel, 
             <div className="relative bg-white rounded-xl shadow-xl border border-slate-100 w-full max-w-sm mx-4 overflow-hidden">
                 <div className="p-6">
                     <div className="flex items-start gap-4">
-                        <div className={`p-2.5 rounded-lg shrink-0 ${isPrimary ? 'bg-blue-50 text-[#001A72]' : 'bg-red-50 text-red-500'}`}>
-                            {isPrimary ? <Package className="w-5 h-5" /> : <Trash2 className="w-5 h-5" />}
+                        <div className={`p-2.5 rounded-lg shrink-0 ${iconClass}`}>
+                            {icon}
                         </div>
                         <div>
                             <h3 className="text-base font-bold text-slate-800">{title}</h3>
@@ -42,7 +56,7 @@ export default function ConfirmModal({ title, description, onConfirm, onCancel, 
                     </button>
                     <button
                         onClick={onConfirm}
-                        className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors ${isPrimary ? 'bg-[#001A72] hover:bg-[#001250]' : 'bg-red-500 hover:bg-red-600'}`}
+                        className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors ${btnClass}`}
                     >
                         {label}
                     </button>
