@@ -160,7 +160,7 @@ function parseQty(text: string): number {
 
 // ── PDF Extraction ─────────────────────────────────────────────────────────────
 
-async function parseBionexoPdf(pdfBuffer: Buffer): Promise<Array<{ codigo: string; quantidade: number }>> {
+async function parseBionexoPdf(pdfBuffer: Buffer): Promise<{ itens: Array<{ codigo: string; quantidade: number }>; fornecedor: string }> {
     // Dynamic import avoids SSR / module resolution issues
     const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
 
@@ -179,6 +179,7 @@ async function parseBionexoPdf(pdfBuffer: Buffer): Promise<Array<{ codigo: strin
     const pdfDoc = await loadingTask.promise;
 
     const results: Array<{ codigo: string; quantidade: number }> = [];
+    const fornecedores: Set<string> = new Set();
     let lastColumns: Column[] | null = null;
 
     for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
@@ -260,12 +261,14 @@ async function parseBionexoPdf(pdfBuffer: Buffer): Promise<Array<{ codigo: strin
 
             const codigo    = (row['codigo'] ?? '').trim();
             const quantidade = parseQty(row['quantidade'] ?? '');
+            const fornecedor = (row['fornecedor'] ?? '').trim();
 
+            if (fornecedor) fornecedores.add(fornecedor);
             if (codigo) results.push({ codigo, quantidade });
         }
     }
 
-    return results;
+    return { itens: results, fornecedor: Array.from(fornecedores).join(', ') };
 }
 
 // ── Route Handler ──────────────────────────────────────────────────────────────
@@ -281,9 +284,9 @@ export async function POST(request: NextRequest) {
         }
 
         const buffer = Buffer.from(await file.arrayBuffer());
-        const itens  = await parseBionexoPdf(buffer);
+        const result = await parseBionexoPdf(buffer);
 
-        return NextResponse.json({ itens });
+        return NextResponse.json({ itens: result.itens, fornecedor: result.fornecedor });
     } catch (err: any) {
         const msg = err?.message ?? 'Erro ao processar PDF.';
         console.error('[bionexo/convert]', msg);

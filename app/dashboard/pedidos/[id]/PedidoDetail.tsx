@@ -35,6 +35,7 @@ interface Pedido {
     created_at: string;
     unidade_id: string;
     usuario_id?: string;
+    fornecedor?: string;
     unidades?: { nome: string };
     usuarios?: { nome: string };
 }
@@ -128,6 +129,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     const [pdfFiles,      setPdfFiles]      = useState<File[]>([]);
     const [pdfError,      setPdfError]      = useState('');
     const [previewBionexo, setPreviewBionexo] = useState<Array<{ codigo: string; quantidade: number }> | null>(null);
+    const [previewFornecedor, setPreviewFornecedor] = useState('');
 
     // Solicitante item-level reception
     const [itemConfirmed, setItemConfirmed] = useState<Record<string, boolean>>({});
@@ -285,8 +287,10 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
         setProcessingPdf(true);
         setPdfError('');
         setPreviewBionexo(null);
+        setPreviewFornecedor('');
         try {
             const mergedMap: Record<string, number> = {};
+            const fornecedores: Set<string> = new Set();
             for (const file of files) {
                 const formData = new FormData();
                 formData.append('file', file);
@@ -296,8 +300,10 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                 for (const it of (json.itens as Array<{ codigo: string; quantidade: number }>) ?? []) {
                     mergedMap[it.codigo] = (mergedMap[it.codigo] || 0) + it.quantidade;
                 }
+                if (json.fornecedor) fornecedores.add(json.fornecedor);
             }
             setPreviewBionexo(Object.entries(mergedMap).map(([codigo, quantidade]) => ({ codigo, quantidade })));
+            setPreviewFornecedor(Array.from(fornecedores).join(', '));
         } catch (err: any) {
             setPdfError(err.message || 'Erro ao processar PDF.');
         } finally {
@@ -309,6 +315,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
         setPdfFiles(files);
         setPdfError('');
         setPreviewBionexo(null);
+        setPreviewFornecedor('');
         processPdfFiles(files);
     }
 
@@ -339,10 +346,13 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                 const quantidade_atendida = previewMap[item.itens.codigo] ?? 0;
                 await supabase.from('pedidos_itens').update({ quantidade_atendida }).eq('id', item.id);
             }
-            await supabase.from('pedidos').update({ status: 'Realizado' }).eq('id', id);
+            const updateData: any = { status: 'Realizado' };
+            if (previewFornecedor) updateData.fornecedor = previewFornecedor;
+            await supabase.from('pedidos').update(updateData).eq('id', id);
             await loadData();
             setPdfFiles([]);
             setPreviewBionexo(null);
+            setPreviewFornecedor('');
         } catch (err: any) {
             setPdfError(err.message || 'Erro ao confirmar pedido.');
         } finally {
@@ -715,6 +725,12 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                 <p className="text-slate-500 mb-0.5">Solicitante</p>
                                 <p className="font-medium text-slate-900">{pedido.usuarios?.nome || '—'}</p>
                             </div>
+                            {pedido.fornecedor && (
+                                <div>
+                                    <p className="text-slate-500 mb-0.5">Fornecedor</p>
+                                    <p className="font-medium text-slate-900">{pedido.fornecedor}</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -857,6 +873,12 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                             {/* Preview da comparação */}
                             {previewComparison && (
                                 <div className="border border-slate-200 rounded-xl overflow-hidden">
+                                    {previewFornecedor && (
+                                        <div className="px-5 py-3 bg-blue-50 border-b border-blue-100 flex items-center gap-2">
+                                            <span className="text-xs font-semibold text-slate-500 uppercase">Fornecedor:</span>
+                                            <span className="text-sm font-bold text-[#001A72]">{previewFornecedor}</span>
+                                        </div>
+                                    )}
                                     <div className="px-5 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                                         <div>
                                             <p className="text-sm font-bold text-slate-800">Prévia da Comparação</p>
