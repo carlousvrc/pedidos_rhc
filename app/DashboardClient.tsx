@@ -3,11 +3,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { FileText, Clock, CheckCircle, Plus, RefreshCw, ShoppingCart, Search, X, Trash2, ArrowRightLeft, History, BarChart3, Package, Users, LogOut, AlertTriangle, Bell, BookOpen } from 'lucide-react';
-import NotificationBell from './components/NotificationBell';
+import { FileText, Clock, CheckCircle, Plus, RefreshCw, ShoppingCart, Search, X, Trash2, ArrowRightLeft, History, BarChart3, Package, Users, AlertTriangle, Bell } from 'lucide-react';
 import type { Usuario } from '@/lib/auth';
 import ConfirmModal from './components/ConfirmModal';
-import { logoutUser } from './login/actions';
 
 interface DashboardClientProps {
     currentUser: Usuario | null;
@@ -301,94 +299,6 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
 
     return (
         <>
-        {/* Top bar */}
-        <div className="bg-[#001A72] shadow-md -mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6 lg:-mt-8 mb-6 px-4 sm:px-8">
-            <div className="max-w-[1400px] mx-auto h-16 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <Link href="/" className="flex items-center gap-2.5">
-                        <div className="bg-white rounded-lg px-2 py-1">
-                            <img src="/logo.png" alt="Hospital Casa Logo" className="h-9 w-auto object-contain" />
-                        </div>
-                        <span className="text-base font-bold text-white tracking-tight hidden lg:block">RHC Pedidos</span>
-                    </Link>
-                    <div className="hidden md:flex items-center gap-0.5 ml-2">
-                        {canCreateOrder && (
-                            <Link href="/dashboard/pedidos/novo" className="px-3 py-1.5 rounded-md text-xs font-medium text-white/80 hover:bg-[#001250] hover:text-white transition-colors">
-                                Novo Pedido
-                            </Link>
-                        )}
-                        {currentUser?.permissoes?.modulos?.historico !== false && (
-                            <Link href="/dashboard/historico" className="px-3 py-1.5 rounded-md text-xs font-medium text-white/80 hover:bg-[#001250] hover:text-white transition-colors">
-                                Histórico
-                            </Link>
-                        )}
-                        {currentUser?.permissoes?.modulos?.transferencias !== false && (
-                            <Link href="/dashboard/transferencias" className="relative px-3 py-1.5 rounded-md text-xs font-medium text-white/80 hover:bg-[#001250] hover:text-white transition-colors">
-                                Transferências
-                                {pendingTransfers.length > 0 && (
-                                    <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white px-1 animate-pulse">
-                                        {pendingTransfers.length}
-                                    </span>
-                                )}
-                            </Link>
-                        )}
-                        {currentUser?.permissoes?.modulos?.relatorios && (
-                            <Link href="/dashboard/relatorios" className="px-3 py-1.5 rounded-md text-xs font-medium text-white/80 hover:bg-[#001250] hover:text-white transition-colors">
-                                Relatórios
-                            </Link>
-                        )}
-                        {currentUser?.permissoes?.modulos?.itens && (
-                            <Link href="/dashboard/itens" className="px-3 py-1.5 rounded-md text-xs font-medium text-white/80 hover:bg-[#001250] hover:text-white transition-colors">
-                                Itens
-                            </Link>
-                        )}
-                        {currentUser?.permissoes?.modulos?.usuarios && (
-                            <Link href="/dashboard/usuarios" className="px-3 py-1.5 rounded-md text-xs font-medium text-white/80 hover:bg-[#001250] hover:text-white transition-colors">
-                                Usuários
-                            </Link>
-                        )}
-                        <Link href="/dashboard/ajuda" className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium text-white/60 hover:bg-[#001250] hover:text-white transition-colors">
-                            <BookOpen className="w-3.5 h-3.5" />
-                            Ajuda
-                        </Link>
-                    </div>
-                </div>
-                <div className="flex items-center gap-3">
-                    {currentUser?.id && (currentUser?.role === 'comprador' || currentUser?.role === 'admin') && (
-                        <NotificationBell usuarioId={currentUser.id} />
-                    )}
-                    {divergencias.length > 0 && (
-                        <button
-                            onClick={() => setDivPanelOpen(o => !o)}
-                            className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-white/80 hover:bg-[#001250] hover:text-white transition-colors"
-                            title={`${divergencias.length} divergência${divergencias.length !== 1 ? 's' : ''} de recebimento`}
-                        >
-                            <Bell className="w-4 h-4" />
-                            <span className="hidden sm:inline">Divergências</span>
-                            <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white px-1 animate-pulse">
-                                {divergencias.length}
-                            </span>
-                        </button>
-                    )}
-                    {updating && (
-                        <span className="flex items-center gap-1.5 text-xs text-white/70 px-3 py-1.5 rounded-full">
-                            <RefreshCw className="w-3 h-3 animate-spin" />
-                        </span>
-                    )}
-                    <form action={logoutUser}>
-                        <button
-                            type="submit"
-                            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-white/80 hover:bg-[#001250] hover:text-white rounded-md transition-colors"
-                            title="Sair do sistema"
-                        >
-                            <LogOut className="w-4 h-4" />
-                            <span className="hidden sm:inline">Sair</span>
-                        </button>
-                    </form>
-                </div>
-            </div>
-        </div>
-
         <div className="max-w-[1400px] mx-auto space-y-6">
 
             {/* Greeting */}

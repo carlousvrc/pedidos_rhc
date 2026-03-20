@@ -10,22 +10,9 @@ interface LayoutWrapperProps {
 
 export function LayoutWrapper({ children, navbar }: LayoutWrapperProps) {
     const pathname = usePathname();
-    const isLogin = pathname === '/login';
-    const isHome = pathname === '/';
 
-    if (isLogin) {
+    if (pathname === '/login') {
         return <>{children}</>;
-    }
-
-    if (isHome) {
-        return (
-            <>
-                <main className="flex-1 w-full mx-auto p-4 sm:p-6 lg:p-8">
-                    {children}
-                </main>
-                <AssistantWidget />
-            </>
-        );
     }
 
     return (
