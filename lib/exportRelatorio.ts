@@ -573,7 +573,7 @@ export async function exportExcel(data: RelatorioData) {
                     tl: { col: 0, row: 0 },
                     br: { col: 1.8, row: 3 },
                     editAs: 'oneCell',
-                });
+                } as any);
             } catch { /* ignora se falhar */ }
         }
 
