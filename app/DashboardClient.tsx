@@ -247,7 +247,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
     const realizados = pedidos.filter((p: any) => p.status?.toLowerCase() === 'realizado').length;
     const recebidos  = pedidos.filter((p: any) => p.status?.toLowerCase() === 'recebido').length;
 
-    const canCreateOrder = !currentUser || currentUser?.permissoes?.modulos?.criar_pedido !== false;
+    const canCreateOrder = !currentUser || currentUser?.permissoes?.modulos?.pedidos !== false;
     const canDelete = currentUser?.permissoes?.modulos?.usuarios === true;
     const hasFilters = filterNumero || filterUnidade || filterData || filterStatus;
 
