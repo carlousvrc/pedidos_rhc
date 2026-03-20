@@ -589,7 +589,7 @@ export async function exportExcel(data: RelatorioData) {
 
     // Filtros
     sectionRow(wsResumo, 'FILTROS APLICADOS', 4);
-    (['Unidade', data.filtroUnidade || 'Todas'] as const) && (() => {
+    (() => {
         const r = wsResumo.addRow(['Unidade', data.filtroUnidade || 'Todas']);
         r.getCell(1).fill = xlFill('EFF6FF'); r.getCell(1).font = xlFont(true, 9, SLATE600.replace('FF',''));
         r.getCell(2).font = xlFont(true, 10, PRIMARY); r.getCell(2).alignment = xlAlign('right');
