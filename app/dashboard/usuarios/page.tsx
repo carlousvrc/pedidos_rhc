@@ -1,6 +1,6 @@
 'use client';
 
-import { Users, Search, UserPlus, Save, X, ShieldCheck, Eye, Trash2, Pencil } from 'lucide-react';
+import { Users, Search, UserPlus, Save, X, ShieldCheck, Eye, EyeOff, Trash2, Pencil, ChevronRight } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { mockUsuarios, mockUnidades } from '@/lib/mockData';
@@ -10,10 +10,10 @@ type Role = 'admin' | 'comprador' | 'solicitante' | 'aprovador';
 
 interface Modulos {
     pedidos: boolean;
+    criar_pedido: boolean;
     historico: boolean;
     itens: boolean;
     relatorios: boolean;
-    bionexo: boolean;
     usuarios: boolean;
     transferencias: boolean;
 }
@@ -35,6 +35,7 @@ interface UsuarioRow {
 
 const MODULO_LABELS: { key: keyof Modulos; label: string }[] = [
     { key: 'pedidos', label: 'Pedidos' },
+    { key: 'criar_pedido', label: 'Criar Pedido' },
     { key: 'historico', label: 'Histórico' },
     { key: 'transferencias', label: 'Transferências' },
     { key: 'itens', label: 'Itens' },
@@ -44,10 +45,10 @@ const MODULO_LABELS: { key: keyof Modulos; label: string }[] = [
 
 const DEFAULT_MODULOS: Modulos = {
     pedidos: true,
+    criar_pedido: true,
     historico: true,
     itens: false,
     relatorios: false,
-    bionexo: false,
     usuarios: false,
     transferencias: true,
 };
@@ -60,6 +61,26 @@ function getRoleBadge(role: string) {
         case 'aprovador': return 'bg-yellow-100 text-yellow-800';
         default: return 'bg-slate-100 text-slate-700';
     }
+}
+
+const AVATAR_COLORS = [
+    'bg-[#001A72]', 'bg-emerald-600', 'bg-violet-600', 'bg-amber-600',
+    'bg-rose-600', 'bg-cyan-700', 'bg-teal-600', 'bg-orange-600',
+];
+
+function getAvatarColor(name: string) {
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+function UserAvatar({ nome }: { nome: string }) {
+    const initials = nome.split(' ').slice(0, 2).map(p => p[0]).join('').toUpperCase();
+    return (
+        <div className={`w-8 h-8 rounded-full ${getAvatarColor(nome)} flex items-center justify-center text-white text-xs font-bold shrink-0`}>
+            {initials}
+        </div>
+    );
 }
 
 function getScopeBadge(scope?: string) {
@@ -95,6 +116,7 @@ export default function UsuariosPage() {
         unidade_id: '', scope: 'operador', modulos: { ...DEFAULT_MODULOS },
     });
     const [saving, setSaving] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     // Delete state
     const [deleteTarget, setDeleteTarget] = useState<UsuarioRow | null>(null);
@@ -149,7 +171,7 @@ export default function UsuariosPage() {
         if (scope === 'admin') {
             setForm(f => ({
                 ...f, scope, role: f.role === 'solicitante' ? 'admin' : f.role,
-                modulos: { pedidos: true, historico: true, itens: true, relatorios: true, bionexo: true, usuarios: true, transferencias: true },
+                modulos: { pedidos: true, criar_pedido: true, historico: true, itens: true, relatorios: true, usuarios: true, transferencias: true },
             }));
         } else {
             setForm(f => ({
@@ -236,17 +258,29 @@ export default function UsuariosPage() {
     }
 
     return (
-        <div className="max-w-[1400px] mx-auto space-y-6">
+        <div className="max-w-[1400px] mx-auto space-y-5">
 
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-start justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Gestão de Usuários</h1>
-                    <p className="text-slate-500 mt-1 text-sm">Administre os acessos e permissões do sistema.</p>
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-2">
+                        <a href="/" className="hover:text-[#001A72] transition-colors">Dashboard</a>
+                        <ChevronRight className="w-3 h-3" />
+                        <span className="text-slate-700 font-medium">Usuários</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-violet-600 flex items-center justify-center shadow-sm shrink-0">
+                            <Users className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-bold text-slate-900">Gestão de Usuários</h1>
+                            <p className="text-xs text-slate-400 mt-0.5">{filteredUsers.length} usuário{filteredUsers.length !== 1 ? 's' : ''} no sistema</p>
+                        </div>
+                    </div>
                 </div>
                 <button
                     onClick={openCreateModal}
-                    className="flex items-center gap-2 px-4 py-2 bg-[#001A72] text-white rounded-lg hover:bg-[#001250] transition-colors shadow-sm text-sm font-medium"
+                    className="flex items-center gap-2 px-4 py-2 bg-[#001A72] text-white rounded-lg hover:bg-[#001250] transition-colors shadow-sm text-sm font-medium shrink-0"
                 >
                     <UserPlus className="w-4 h-4" /> Novo Usuário
                 </button>
@@ -294,10 +328,10 @@ export default function UsuariosPage() {
                                         <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
                                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="bg-slate-100 p-2 rounded-full">
-                                                        <Users className="w-4 h-4 text-slate-500" />
+                                                    <UserAvatar nome={user.nome} />
+                                                    <div>
+                                                        <p className="font-semibold text-slate-800">{user.username}</p>
                                                     </div>
-                                                    {user.username}
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">{user.nome}</td>
@@ -379,13 +413,25 @@ export default function UsuariosPage() {
                                     <label className="block text-xs font-medium text-slate-600 mb-1">
                                         {editingUser ? 'Nova Senha' : 'Senha'} {!editingUser && <span className="text-red-500">*</span>}
                                     </label>
-                                    <input
-                                        type="password"
-                                        value={form.senha}
-                                        onChange={e => setForm(f => ({ ...f, senha: e.target.value }))}
-                                        placeholder={editingUser ? 'Deixe vazio para manter' : 'Senha de acesso'}
-                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#001A72] bg-slate-50 focus:bg-white transition-all"
-                                    />
+                                    <div className="relative">
+                                        <input
+                                            type={showPassword ? 'text' : 'password'}
+                                            value={form.senha}
+                                            onChange={e => setForm(f => ({ ...f, senha: e.target.value }))}
+                                            placeholder={editingUser ? 'Deixe vazio para manter' : 'Senha de acesso'}
+                                            className="w-full px-3 py-2 pr-9 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#001A72] bg-slate-50 focus:bg-white transition-all"
+                                        />
+                                        <button
+                                            type="button"
+                                            onMouseDown={() => setShowPassword(true)}
+                                            onMouseUp={() => setShowPassword(false)}
+                                            onMouseLeave={() => setShowPassword(false)}
+                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                                            tabIndex={-1}
+                                        >
+                                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -424,11 +470,11 @@ export default function UsuariosPage() {
                                     onChange={e => {
                                         const r = e.target.value as Role;
                                         if (r === 'aprovador') {
-                                            setForm(f => ({ ...f, role: r, scope: 'admin', modulos: { pedidos: true, historico: true, itens: false, relatorios: false, bionexo: false, usuarios: false, transferencias: false } }));
+                                            setForm(f => ({ ...f, role: r, scope: 'admin', modulos: { pedidos: true, criar_pedido: false, historico: true, itens: false, relatorios: false, usuarios: false, transferencias: false } }));
                                         } else if (r === 'admin') {
-                                            setForm(f => ({ ...f, role: r, scope: 'admin', modulos: { pedidos: true, historico: true, itens: true, relatorios: true, bionexo: true, usuarios: true, transferencias: true } }));
+                                            setForm(f => ({ ...f, role: r, scope: 'admin', modulos: { pedidos: true, criar_pedido: true, historico: true, itens: true, relatorios: true, usuarios: true, transferencias: true } }));
                                         } else if (r === 'comprador') {
-                                            setForm(f => ({ ...f, role: r, scope: 'admin', modulos: { pedidos: true, historico: true, itens: false, relatorios: true, bionexo: true, usuarios: false, transferencias: true } }));
+                                            setForm(f => ({ ...f, role: r, scope: 'admin', modulos: { pedidos: true, criar_pedido: false, historico: true, itens: false, relatorios: true, usuarios: false, transferencias: true } }));
                                         } else {
                                             setForm(f => ({ ...f, role: r, scope: 'operador', modulos: { ...DEFAULT_MODULOS } }));
                                         }

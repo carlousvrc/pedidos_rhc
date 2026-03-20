@@ -1,6 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
+import AssistantWidget from './components/AssistantWidget';
 
 interface LayoutWrapperProps {
     children: React.ReactNode;
@@ -18,9 +19,12 @@ export function LayoutWrapper({ children, navbar }: LayoutWrapperProps) {
 
     if (isHome) {
         return (
-            <main className="flex-1 w-full mx-auto p-4 sm:p-6 lg:p-8">
-                {children}
-            </main>
+            <>
+                <main className="flex-1 w-full mx-auto p-4 sm:p-6 lg:p-8">
+                    {children}
+                </main>
+                <AssistantWidget />
+            </>
         );
     }
 
@@ -30,6 +34,7 @@ export function LayoutWrapper({ children, navbar }: LayoutWrapperProps) {
             <main className="flex-1 w-full mx-auto p-4 sm:p-6 lg:p-8">
                 {children}
             </main>
+            <AssistantWidget />
         </>
     );
 }

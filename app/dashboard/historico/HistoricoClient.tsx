@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { Search, FileText, Clock, ArrowRight, Trash2 } from 'lucide-react';
+import { Search, FileText, Clock, ArrowRight, Trash2, ChevronRight, History } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import ConfirmModal from '@/app/components/ConfirmModal';
 
@@ -77,22 +77,34 @@ export default function HistoricoClient({ pedidos, scope, canDelete }: Props) {
 
     return (
     <>
-        <div className="max-w-[1400px] mx-auto space-y-6">
+        <div className="max-w-[1400px] mx-auto space-y-5">
 
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-start justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Histórico de Pedidos</h1>
-                    <p className="text-slate-500 mt-1 text-sm">
-                        {scope === 'admin'
-                            ? 'Todos os pedidos do sistema — visualize, processe o Bionexo e acompanhe o recebimento.'
-                            : 'Acompanhe suas solicitações e confirme o recebimento.'}
-                    </p>
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-2">
+                        <Link href="/" className="hover:text-[#001A72] transition-colors">Dashboard</Link>
+                        <ChevronRight className="w-3 h-3" />
+                        <span className="text-slate-700 font-medium">Histórico</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-slate-700 flex items-center justify-center shadow-sm shrink-0">
+                            <History className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-bold text-slate-900">Histórico de Pedidos</h1>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                                {scope === 'admin'
+                                    ? 'Todos os pedidos do sistema — visualize e acompanhe o recebimento.'
+                                    : 'Acompanhe suas solicitações e confirme o recebimento.'}
+                            </p>
+                        </div>
+                    </div>
                 </div>
                 {scope === 'admin' && counts.Pendente > 0 && (
-                    <div className="flex items-center gap-2 bg-orange-50 border border-orange-200 text-orange-700 px-4 py-2.5 rounded-lg text-sm font-medium">
+                    <div className="flex items-center gap-2 bg-orange-50 border border-orange-200 text-orange-700 px-4 py-2.5 rounded-lg text-sm font-medium shrink-0">
                         <Clock className="w-4 h-4" />
-                        {counts.Pendente} pedido{counts.Pendente > 1 ? 's' : ''} aguardando processamento
+                        {counts.Pendente} pedido{counts.Pendente > 1 ? 's' : ''} aguardando
                     </div>
                 )}
             </div>

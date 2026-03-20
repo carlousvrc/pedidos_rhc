@@ -1,6 +1,6 @@
 'use client';
 
-import { Package, Search, Plus, X, Save } from 'lucide-react';
+import { Package, Search, Plus, X, Save, ChevronRight } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { mockItens } from '@/lib/mockData';
@@ -128,20 +128,32 @@ export default function ItensPage() {
     }
 
     return (
-        <div className="max-w-[1400px] mx-auto space-y-6">
+        <div className="max-w-[1400px] mx-auto space-y-5">
 
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-start justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Itens</h1>
-                    <p className="text-slate-500 mt-1 text-sm">
-                        Catálogo de materiais e medicamentos disponíveis para pedido.
-                    </p>
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-2">
+                        <a href="/" className="hover:text-[#001A72] transition-colors">Dashboard</a>
+                        <ChevronRight className="w-3 h-3" />
+                        <span className="text-slate-700 font-medium">Itens</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-orange-500 flex items-center justify-center shadow-sm shrink-0">
+                            <Package className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-bold text-slate-900">Catálogo de Itens</h1>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                                {loading ? 'Carregando...' : `${itens.length.toLocaleString('pt-BR')} itens cadastrados`}
+                            </p>
+                        </div>
+                    </div>
                 </div>
-                <div className="flex items-center gap-3">
-                    {!loading && (
-                        <span className="text-sm text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg font-medium">
-                            {filtered.length.toLocaleString('pt-BR')} item(s)
+                <div className="flex items-center gap-3 shrink-0">
+                    {!loading && filtered.length !== itens.length && (
+                        <span className="text-xs text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg font-medium">
+                            {filtered.length.toLocaleString('pt-BR')} encontrado{filtered.length !== 1 ? 's' : ''}
                         </span>
                     )}
                     <button

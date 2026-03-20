@@ -3,6 +3,7 @@ import Image from 'next/image';
 import { LogOut } from 'lucide-react';
 import { logoutUser } from './login/actions';
 import { getCurrentUser } from '@/lib/auth';
+import NotificationBell from './components/NotificationBell';
 
 function getRoleBadgeClass(role: string) {
     switch (role) {
@@ -104,6 +105,9 @@ export async function Navbar() {
 
             {/* User Profile Right Side */}
             <div className="flex items-center gap-3">
+                {currentUser?.id && (role === 'comprador' || role === 'admin') && (
+                    <NotificationBell usuarioId={currentUser.id} />
+                )}
                 <span className={`hidden sm:inline-flex text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${getRoleBadgeClass(role)}`}>
                     {role}
                 </span>

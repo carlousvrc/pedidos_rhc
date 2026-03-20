@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { FileText, Clock, CheckCircle, Plus, RefreshCw, ShoppingCart, Search, X, Trash2, ArrowRightLeft, History, BarChart3, Package, Users, FileSpreadsheet, LogOut } from 'lucide-react';
+import { FileText, Clock, CheckCircle, Plus, RefreshCw, ShoppingCart, Search, X, Trash2, ArrowRightLeft, History, BarChart3, Package, Users, LogOut, AlertTriangle, Bell, BookOpen } from 'lucide-react';
+import NotificationBell from './components/NotificationBell';
 import type { Usuario } from '@/lib/auth';
 import ConfirmModal from './components/ConfirmModal';
 import { logoutUser } from './login/actions';
@@ -37,7 +38,7 @@ async function fetchPedidos(currentUser: Usuario | null): Promise<any[]> {
         // Fetch user's own orders
         const { data: ownOrders } = await supabase
             .from('pedidos')
-            .select('id, numero_pedido, status, created_at, unidades(nome), usuario_id, usuarios(nome)')
+            .select('id, numero_pedido, status, created_at, unidades(nome), usuario_id, usuarios!usuario_id(nome)')
             .eq('usuario_id', currentUser!.id)
             .order('created_at', { ascending: false })
             .limit(200);
@@ -61,7 +62,7 @@ async function fetchPedidos(currentUser: Usuario | null): Promise<any[]> {
                     const pedidoIds = [...new Set(piData.map(p => p.pedido_id))];
                     const { data: originOrders } = await supabase
                         .from('pedidos')
-                        .select('id, numero_pedido, status, created_at, unidades(nome), usuario_id, usuarios(nome)')
+                        .select('id, numero_pedido, status, created_at, unidades(nome), usuario_id, usuarios!usuario_id(nome)')
                         .in('id', pedidoIds)
                         .eq('unidade_id', currentUser!.unidade_id);
 
@@ -85,7 +86,7 @@ async function fetchPedidos(currentUser: Usuario | null): Promise<any[]> {
     if (role === 'comprador') {
         const { data, error } = await supabase
             .from('pedidos')
-            .select('id, numero_pedido, status, created_at, unidades(nome), usuario_id, usuarios(nome)')
+            .select('id, numero_pedido, status, created_at, unidades(nome), usuario_id, usuarios!usuario_id(nome)')
             .neq('status', 'Aguardando Aprovação')
             .order('created_at', { ascending: false })
             .limit(200);
@@ -95,7 +96,7 @@ async function fetchPedidos(currentUser: Usuario | null): Promise<any[]> {
 
     const { data, error } = await supabase
         .from('pedidos')
-        .select('id, numero_pedido, status, created_at, unidades(nome), usuario_id, usuarios(nome)')
+        .select('id, numero_pedido, status, created_at, unidades(nome), usuario_id, usuarios!usuario_id(nome)')
         .order('created_at', { ascending: false })
         .limit(200);
 
@@ -119,6 +120,10 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
     // Pending transfers for this user's unit
     const [pendingTransfers, setPendingTransfers] = useState<any[]>([]);
 
+    // Divergence observations (for compradores/admins)
+    const [divergencias, setDivergencias] = useState<any[]>([]);
+    const [divPanelOpen, setDivPanelOpen] = useState(true);
+
     // Initial fetch
     useEffect(() => {
         setLoading(true);
@@ -127,6 +132,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
             setLoading(false);
         });
         loadPendingTransfers();
+        loadDivergencias();
     }, [currentUser]);
 
     async function loadPendingTransfers() {
@@ -173,6 +179,31 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
         setPendingTransfers(enriched);
     }
 
+    async function loadDivergencias() {
+        const role = currentUser?.role;
+        if (role !== 'comprador' && role !== 'admin') return;
+
+        const { data } = await supabase
+            .from('pedidos_itens')
+            .select('id, observacao_recebimento, quantidade_recebida, pedido_id, item_id, item_recebido_id, pedidos(id, numero_pedido, unidades(nome)), itens!item_id(nome, codigo), item_recebido:itens!item_recebido_id(id, codigo, nome)')
+            .not('observacao_recebimento', 'is', null)
+            .neq('observacao_recebimento', '');
+
+        if (!data || data.length === 0) { setDivergencias([]); return; }
+
+        setDivergencias(data.map((pi: any) => ({
+            id: pi.id,
+            observacao: pi.observacao_recebimento,
+            quantidade_recebida: pi.quantidade_recebida,
+            pedido_id: pi.pedidos?.id || pi.pedido_id,
+            pedido_numero: pi.pedidos?.numero_pedido || '—',
+            unidade_nome: pi.pedidos?.unidades?.nome || '—',
+            item_nome: pi.itens?.nome || '—',
+            item_codigo: pi.itens?.codigo || '—',
+            item_recebido: pi.item_recebido || null,
+        })));
+    }
+
     // Real-time subscription
     useEffect(() => {
         const channel = supabase
@@ -216,7 +247,7 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
     const realizados = pedidos.filter((p: any) => p.status?.toLowerCase() === 'realizado').length;
     const recebidos  = pedidos.filter((p: any) => p.status?.toLowerCase() === 'recebido').length;
 
-    const canCreateOrder = !currentUser || currentUser?.permissoes?.modulos?.pedidos !== false;
+    const canCreateOrder = !currentUser || currentUser?.permissoes?.modulos?.criar_pedido !== false;
     const canDelete = currentUser?.permissoes?.modulos?.usuarios === true;
     const hasFilters = filterNumero || filterUnidade || filterData || filterStatus;
 
@@ -262,6 +293,11 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
         setFilterData('');
         setFilterStatus('');
     }
+
+    const firstName = currentUser?.nome?.split(' ')[0] || 'Usuário';
+    const hour = new Date().getHours();
+    const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
+    const dateStr = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
 
     return (
         <>
@@ -311,13 +347,32 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
                                 Usuários
                             </Link>
                         )}
+                        <Link href="/dashboard/ajuda" className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium text-white/60 hover:bg-[#001250] hover:text-white transition-colors">
+                            <BookOpen className="w-3.5 h-3.5" />
+                            Ajuda
+                        </Link>
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
-                    {(loading || updating) && (
+                    {currentUser?.id && (currentUser?.role === 'comprador' || currentUser?.role === 'admin') && (
+                        <NotificationBell usuarioId={currentUser.id} />
+                    )}
+                    {divergencias.length > 0 && (
+                        <button
+                            onClick={() => setDivPanelOpen(o => !o)}
+                            className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-white/80 hover:bg-[#001250] hover:text-white transition-colors"
+                            title={`${divergencias.length} divergência${divergencias.length !== 1 ? 's' : ''} de recebimento`}
+                        >
+                            <Bell className="w-4 h-4" />
+                            <span className="hidden sm:inline">Divergências</span>
+                            <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white px-1 animate-pulse">
+                                {divergencias.length}
+                            </span>
+                        </button>
+                    )}
+                    {updating && (
                         <span className="flex items-center gap-1.5 text-xs text-white/70 px-3 py-1.5 rounded-full">
                             <RefreshCw className="w-3 h-3 animate-spin" />
-                            {loading ? 'Carregando...' : 'Atualizando...'}
                         </span>
                     )}
                     <form action={logoutUser}>
@@ -335,6 +390,20 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
         </div>
 
         <div className="max-w-[1400px] mx-auto space-y-6">
+
+            {/* Greeting */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h2 className="text-xl font-bold text-slate-800">{greeting}, {firstName}.</h2>
+                    <p className="text-sm text-slate-400 mt-0.5 capitalize">{dateStr}</p>
+                </div>
+                {(loading || updating) && (
+                    <span className="flex items-center gap-1.5 text-xs text-slate-400 bg-white border border-slate-200 px-3 py-1.5 rounded-full shadow-sm">
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        {loading ? 'Carregando...' : 'Atualizando...'}
+                    </span>
+                )}
+            </div>
 
             {/* Status Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
@@ -426,67 +495,141 @@ export default function DashboardClient({ currentUser }: DashboardClientProps) {
             </div>
 
             {/* Quick Access Modules */}
-            <div className="flex gap-3 overflow-x-auto pb-1">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                 {canCreateOrder && (
-                    <Link href="/dashboard/pedidos/novo" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
-                        <div className="p-2.5 bg-blue-50 text-[#001A72] rounded-lg w-fit group-hover:bg-[#001A72] group-hover:text-white transition-colors">
+                    <Link href="/dashboard/pedidos/novo" className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/40 hover:shadow-md transition-all group">
+                        <div className="p-2.5 bg-blue-50 text-[#001A72] rounded-lg w-fit group-hover:bg-[#001A72] group-hover:text-white transition-colors mb-3">
                             <Plus className="w-5 h-5" />
                         </div>
-                        <p className="text-sm font-semibold text-slate-800 mt-3">Novo Pedido</p>
+                        <p className="text-sm font-semibold text-slate-800">Novo Pedido</p>
                         <p className="text-[11px] text-slate-400 mt-0.5">Criar solicitação</p>
                     </Link>
                 )}
                 {currentUser?.permissoes?.modulos?.historico !== false && (
-                    <Link href="/dashboard/historico" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
-                        <div className="p-2.5 bg-slate-50 text-slate-600 rounded-lg w-fit group-hover:bg-[#001A72] group-hover:text-white transition-colors">
+                    <Link href="/dashboard/historico" className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/40 hover:shadow-md transition-all group">
+                        <div className="p-2.5 bg-slate-100 text-slate-600 rounded-lg w-fit group-hover:bg-[#001A72] group-hover:text-white transition-colors mb-3">
                             <History className="w-5 h-5" />
                         </div>
-                        <p className="text-sm font-semibold text-slate-800 mt-3">Histórico</p>
+                        <p className="text-sm font-semibold text-slate-800">Histórico</p>
                         <p className="text-[11px] text-slate-400 mt-0.5">Pedidos anteriores</p>
                     </Link>
                 )}
                 {currentUser?.permissoes?.modulos?.transferencias !== false && (
-                    <Link href="/dashboard/transferencias" className="relative flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-purple-300 hover:shadow-md transition-all group">
+                    <Link href="/dashboard/transferencias" className="relative bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-purple-300 hover:shadow-md transition-all group">
                         {pendingTransfers.length > 0 && (
-                            <span className="absolute top-3 right-3 min-w-[22px] h-[22px] flex items-center justify-center rounded-full bg-red-500 text-[11px] font-bold text-white px-1.5 animate-pulse shadow-sm">
+                            <span className="absolute top-3 right-3 min-w-[20px] h-5 flex items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white px-1 animate-pulse">
                                 {pendingTransfers.length}
                             </span>
                         )}
-                        <div className="p-2.5 bg-purple-50 text-purple-600 rounded-lg w-fit group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                        <div className="p-2.5 bg-purple-50 text-purple-600 rounded-lg w-fit group-hover:bg-purple-600 group-hover:text-white transition-colors mb-3">
                             <ArrowRightLeft className="w-5 h-5" />
                         </div>
-                        <p className="text-sm font-semibold text-slate-800 mt-3">Transferências</p>
+                        <p className="text-sm font-semibold text-slate-800">Transferências</p>
                         <p className="text-[11px] text-slate-400 mt-0.5">{pendingTransfers.length > 0 ? `${pendingTransfers.length} a receber` : 'Remanejamentos'}</p>
                     </Link>
                 )}
                 {currentUser?.permissoes?.modulos?.relatorios && (
-                    <Link href="/dashboard/relatorios" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
-                        <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-lg w-fit group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                    <Link href="/dashboard/relatorios" className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-emerald-300 hover:shadow-md transition-all group">
+                        <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-lg w-fit group-hover:bg-emerald-600 group-hover:text-white transition-colors mb-3">
                             <BarChart3 className="w-5 h-5" />
                         </div>
-                        <p className="text-sm font-semibold text-slate-800 mt-3">Relatórios</p>
+                        <p className="text-sm font-semibold text-slate-800">Relatórios</p>
                         <p className="text-[11px] text-slate-400 mt-0.5">Dados e análises</p>
                     </Link>
                 )}
                 {currentUser?.permissoes?.modulos?.itens && (
-                    <Link href="/dashboard/itens" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
-                        <div className="p-2.5 bg-orange-50 text-orange-600 rounded-lg w-fit group-hover:bg-orange-600 group-hover:text-white transition-colors">
+                    <Link href="/dashboard/itens" className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-orange-300 hover:shadow-md transition-all group">
+                        <div className="p-2.5 bg-orange-50 text-orange-600 rounded-lg w-fit group-hover:bg-orange-600 group-hover:text-white transition-colors mb-3">
                             <Package className="w-5 h-5" />
                         </div>
-                        <p className="text-sm font-semibold text-slate-800 mt-3">Itens</p>
+                        <p className="text-sm font-semibold text-slate-800">Itens</p>
                         <p className="text-[11px] text-slate-400 mt-0.5">Catálogo de produtos</p>
                     </Link>
                 )}
                 {currentUser?.permissoes?.modulos?.usuarios && (
-                    <Link href="/dashboard/usuarios" className="flex-1 min-w-[140px] bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-[#001A72]/30 hover:shadow-md transition-all group">
-                        <div className="p-2.5 bg-violet-50 text-violet-600 rounded-lg w-fit group-hover:bg-violet-600 group-hover:text-white transition-colors">
+                    <Link href="/dashboard/usuarios" className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:border-violet-300 hover:shadow-md transition-all group">
+                        <div className="p-2.5 bg-violet-50 text-violet-600 rounded-lg w-fit group-hover:bg-violet-600 group-hover:text-white transition-colors mb-3">
                             <Users className="w-5 h-5" />
                         </div>
-                        <p className="text-sm font-semibold text-slate-800 mt-3">Usuários</p>
+                        <p className="text-sm font-semibold text-slate-800">Usuários</p>
                         <p className="text-[11px] text-slate-400 mt-0.5">Gerenciar acessos</p>
                     </Link>
                 )}
             </div>
+
+            {/* Divergence Alert Panel — visible to compradores/admins */}
+            {divergencias.length > 0 && divPanelOpen && (
+                <div className="bg-red-50 border-2 border-red-200 rounded-xl overflow-hidden">
+                    <div className="px-5 py-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-lg bg-red-200 flex items-center justify-center shrink-0 animate-pulse">
+                                <AlertTriangle className="w-5 h-5 text-red-700" />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-bold text-red-900 flex items-center gap-2">
+                                    Divergências de Recebimento
+                                    <span className="inline-flex items-center justify-center min-w-[20px] h-5 bg-red-600 text-white text-[10px] font-bold rounded-full px-1">
+                                        {divergencias.length}
+                                    </span>
+                                </h3>
+                                <p className="text-xs text-red-700 mt-0.5">Itens recebidos com apresentação diferente do pedido — requer atenção do comprador</p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => setDivPanelOpen(false)}
+                            className="text-red-400 hover:text-red-600 p-1 rounded transition-colors"
+                            title="Fechar painel"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full text-sm divide-y divide-red-100">
+                            <thead className="bg-red-100/50">
+                                <tr>
+                                    <th className="px-4 py-2 text-left text-xs font-bold text-red-800 uppercase">Item</th>
+                                    <th className="px-4 py-2 text-left text-xs font-bold text-red-800 uppercase">Código</th>
+                                    <th className="px-4 py-2 text-left text-xs font-bold text-red-800 uppercase">Item Recebido</th>
+                                    <th className="px-4 py-2 text-left text-xs font-bold text-red-800 uppercase">Unidade</th>
+                                    <th className="px-4 py-2 text-left text-xs font-bold text-red-800 uppercase">Pedido</th>
+                                    <th className="px-4 py-2 text-left text-xs font-bold text-red-800 uppercase">Observação de Divergência</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-red-100/50">
+                                {divergencias.map(d => (
+                                    <tr key={d.id} className="hover:bg-red-100/30">
+                                        <td className="px-4 py-2.5 text-slate-800 font-medium truncate max-w-[200px]">{d.item_nome}</td>
+                                        <td className="px-4 py-2.5 text-slate-500 font-mono text-xs">{d.item_codigo}</td>
+                                        <td className="px-4 py-2.5 max-w-[200px]">
+                                            {d.item_recebido ? (
+                                                <div className="flex flex-col">
+                                                    <span className="text-xs font-medium text-blue-800 truncate">{d.item_recebido.nome}</span>
+                                                    <span className="text-[10px] text-blue-400 font-mono">{d.item_recebido.codigo}</span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-slate-300 text-xs">—</span>
+                                            )}
+                                        </td>
+                                        <td className="px-4 py-2.5 text-xs font-semibold text-slate-700">{d.unidade_nome}</td>
+                                        <td className="px-4 py-2.5">
+                                            <Link href={`/dashboard/pedidos/${d.pedido_id}`}
+                                                className="text-[#001A72] hover:underline text-xs font-semibold">
+                                                #{d.pedido_numero}
+                                            </Link>
+                                        </td>
+                                        <td className="px-4 py-2.5">
+                                            <span className="inline-flex items-center gap-1.5 text-xs text-red-800 bg-red-100 px-2.5 py-1 rounded-lg font-medium max-w-[400px]">
+                                                <AlertTriangle className="w-3 h-3 shrink-0 text-red-500" />
+                                                {d.observacao}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
 
             {/* Pending Transfers */}
             {pendingTransfers.length > 0 && (

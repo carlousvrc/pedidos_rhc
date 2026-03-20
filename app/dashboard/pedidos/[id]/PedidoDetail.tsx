@@ -8,6 +8,7 @@ import type { Usuario } from '@/lib/auth';
 import {
     ChevronRight, Download, Save, Upload, RefreshCw, Trash2,
     CheckCircle2, Pencil, FileText, X, ArrowRightLeft, Clock,
+    AlertTriangle, MessageSquare,
 } from 'lucide-react';
 import ConfirmModal from '@/app/components/ConfirmModal';
 import 'tom-select/dist/css/tom-select.css';
@@ -26,8 +27,11 @@ interface PedidoItem {
     quantidade_atendida: number;
     quantidade_recebida: number;
     observacao: string;
+    observacao_recebimento?: string;
+    item_recebido_id?: string | null;
     fornecedor?: string;
     itens: { codigo: string; referencia: string; nome: string; tipo?: string };
+    item_recebido?: { id: string; codigo: string; nome: string } | null;
 }
 
 interface Pedido {
@@ -38,6 +42,7 @@ interface Pedido {
     unidade_id: string;
     usuario_id?: string;
     fornecedor?: string;
+    atendido_por?: string | null;
     unidades?: { nome: string };
     usuarios?: { nome: string };
 }
@@ -53,6 +58,7 @@ interface Remanejamento {
     // Joined data for destination order
     destino_pedido_numero?: string;
     destino_unidade_nome?: string;
+    destino_recebido?: boolean;
     // Joined data for origin order
     origem_pedido_numero?: string;
     origem_unidade_nome?: string;
@@ -135,6 +141,10 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
 
     // Solicitante item-level reception
     const [itemConfirmed, setItemConfirmed] = useState<Record<string, boolean>>({});
+    const [itemObservacoes, setItemObservacoes] = useState<Record<string, string>>({});
+    const [itemDivOpen, setItemDivOpen] = useState<Record<string, boolean>>({});
+    const [catalogItens, setCatalogItens] = useState<{id: string; codigo: string; nome: string}[]>([]);
+    const [itemRecebidoId, setItemRecebidoId] = useState<Record<string, string>>({});
     const [filterFornecedor, setFilterFornecedor] = useState('');
 
     // Inline editing
@@ -176,17 +186,23 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     async function loadData() {
         const { data: supabasePedido, error } = await supabase
             .from('pedidos')
-            .select('*, unidades(nome), usuarios(nome)')
+            .select('*, unidades(nome), usuarios!usuario_id(nome)')
             .eq('id', id)
             .single();
 
         if (supabasePedido && !error) {
             setPedido(supabasePedido as Pedido);
-            const { data: supabaseItems } = await supabase
+            const { data: supabaseItems, error: itemsError } = await supabase
                 .from('pedidos_itens')
-                .select('id, item_id, quantidade, quantidade_atendida, quantidade_recebida, observacao, fornecedor, itens(codigo, referencia, nome, tipo)')
+                .select('*, itens!item_id(codigo, referencia, nome, tipo), item_recebido:itens!item_recebido_id(id, codigo, nome)')
                 .eq('pedido_id', id);
+            if (itemsError) console.error('Erro ao carregar itens:', itemsError.message, itemsError.details, itemsError.hint, itemsError.code);
             setItems((supabaseItems as unknown as PedidoItem[]) || []);
+
+            if (supabasePedido?.status === 'Realizado') {
+                const { data: catData } = await supabase.from('itens').select('id, codigo, nome').order('nome');
+                setCatalogItens(catData || []);
+            }
 
             // Load remanejamentos OUT (from this order's items → other orders)
             const itemIds = (supabaseItems as any[])?.map((i: any) => i.id) || [];
@@ -203,7 +219,14 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                         const { data: u } = await supabase.from('unidades').select('nome').eq('id', destPed.unidade_id).single();
                         if (u) destUnidade = u.nome;
                     }
-                    outEnriched.push({ ...r, destino_pedido_numero: destPed?.numero_pedido, destino_unidade_nome: destUnidade });
+                    const { data: destItem } = await supabase
+                        .from('pedidos_itens')
+                        .select('quantidade_recebida, quantidade_atendida')
+                        .eq('pedido_id', r.pedido_destino_id)
+                        .eq('item_id', r.item_id)
+                        .maybeSingle();
+                    const destRecebido = destItem ? destItem.quantidade_recebida >= destItem.quantidade_atendida && destItem.quantidade_atendida > 0 : false;
+                    outEnriched.push({ ...r, destino_pedido_numero: destPed?.numero_pedido, destino_unidade_nome: destUnidade, destino_recebido: destRecebido });
                 }
                 setRemanejamentosOut(outEnriched);
             } else {
@@ -301,6 +324,29 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
             for (const item of items) {
                 if (next[item.id] === undefined)
                     next[item.id] = item.quantidade_recebida > 0 ? item.quantidade_recebida : item.quantidade_atendida;
+            }
+            return next;
+        });
+        setItemObservacoes(prev => {
+            const next = { ...prev };
+            for (const item of items) {
+                if (next[item.id] === undefined) next[item.id] = item.observacao_recebimento || '';
+            }
+            return next;
+        });
+        setItemDivOpen(prev => {
+            const next = { ...prev };
+            for (const item of items) {
+                if (item.observacao_recebimento) next[item.id] = true;
+            }
+            return next;
+        });
+        setItemRecebidoId(prev => {
+            const next = { ...prev };
+            for (const item of items) {
+                if (next[item.id] === undefined && item.item_recebido_id) {
+                    next[item.id] = item.item_recebido_id;
+                }
             }
             return next;
         });
@@ -405,6 +451,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
             }
             const updateData: any = { status: 'Realizado' };
             if (previewFornecedor) updateData.fornecedor = previewFornecedor;
+            if (currentUser?.id) updateData.atendido_por = currentUser.id;
             await supabase.from('pedidos').update(updateData).eq('id', id);
 
             // Propagar quantidade_atendida para itens transferidos (remanejamentos)
@@ -431,6 +478,12 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                             ...(destFornecedor ? { fornecedor: destFornecedor } : {}),
                         })
                         .eq('id', destItem.id);
+
+                    // Avançar o pedido destino para "Realizado" para que o solicitante possa confirmar o recebimento
+                    await supabase.from('pedidos')
+                        .update({ status: 'Realizado' })
+                        .eq('id', rem.pedido_destino_id)
+                        .in('status', ['Pendente', 'Em Cotação']);
                 }
             }
 
@@ -447,17 +500,53 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
 
     // ── Confirmar Recebimento (solicitante saves reception per item) ──────────
 
-    async function handleSaveRecebimento() {
+    async function handleSaveRecebimento(finalizar = false) {
         if (!pedido) return;
         setSaving(true);
         try {
             for (const item of items) {
                 const qty = itemConfirmed[item.id] ? (itemQtyEdit[item.id] ?? 0) : 0;
+                const obs = itemObservacoes[item.id]?.trim() || null;
                 await supabase.from('pedidos_itens')
-                    .update({ quantidade_recebida: qty })
+                    .update({ quantidade_recebida: qty, observacao_recebimento: obs, item_recebido_id: itemRecebidoId[item.id] || null })
                     .eq('id', item.id);
+
             }
-            await supabase.from('pedidos').update({ status: 'Recebido' }).eq('id', id);
+            if (finalizar) {
+                await supabase.from('pedidos').update({ status: 'Recebido' }).eq('id', id);
+            }
+
+            // Notificar o comprador que atendeu este pedido
+            if (pedido.atendido_por) {
+                const divItems = items.filter(i => itemObservacoes[i.id]?.trim());
+                const unidadeNome = pedido.unidades?.nome || 'Unidade';
+
+                if (finalizar && divItems.length > 0) {
+                    await supabase.from('notificacoes').insert({
+                        usuario_id: pedido.atendido_por,
+                        pedido_id: id,
+                        tipo: 'divergencia',
+                        mensagem: `Pedido #${pedido.numero_pedido} (${unidadeNome}) recebido com ${divItems.length} divergência${divItems.length > 1 ? 's' : ''} de itens.`,
+                    });
+                } else if (finalizar) {
+                    await supabase.from('notificacoes').insert({
+                        usuario_id: pedido.atendido_por,
+                        pedido_id: id,
+                        tipo: 'recebimento',
+                        mensagem: `Pedido #${pedido.numero_pedido} (${unidadeNome}) foi confirmado como recebido pelo solicitante.`,
+                    });
+                } else {
+                    // Recebimento parcial
+                    const confirmados = items.filter(i => itemConfirmed[i.id]).length;
+                    await supabase.from('notificacoes').insert({
+                        usuario_id: pedido.atendido_por,
+                        pedido_id: id,
+                        tipo: 'pendencia',
+                        mensagem: `Pedido #${pedido.numero_pedido} (${unidadeNome}) com recebimento parcial: ${confirmados} de ${items.length} itens confirmados.`,
+                    });
+                }
+            }
+
             await loadData();
         } catch (err) {
             console.error('Erro ao salvar recebimento:', err);
@@ -699,7 +788,8 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
 
     async function handleExportCsv() {
         if (!pedido) return;
-        const csv = items.map(i => `${i.itens.codigo};${i.quantidade}`).join('\n');
+        const remanejadoIds = new Set(remanejamentosOut.map(r => r.pedido_item_origem_id));
+        const csv = items.filter(i => !remanejadoIds.has(i.id)).map(i => `${i.itens.codigo};${i.quantidade}`).join('\n');
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const url  = URL.createObjectURL(blob);
         const a    = document.createElement('a');
@@ -815,10 +905,11 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     const canEdit       = currentUser?.permissoes?.modulos?.usuarios === true || role === 'aprovador';
     const status        = pedido.status;
 
-    const allReceptionSet = items.length > 0 && items.every(i => itemConfirmed[i.id] === true);
+    const hasBlockingDivergencias = items.some(i => itemObservacoes[i.id]?.trim() && !itemRecebidoId[i.id]);
+    const allReceptionSet = items.length > 0 && items.every(i => itemConfirmed[i.id] === true) && !hasBlockingDivergencias;
 
     return (
-        <div className="space-y-6 max-w-[1400px]">
+        <div className="space-y-6 max-w-full">
 
             {/* Breadcrumbs */}
             <div className="flex items-center text-xs text-slate-500 gap-2">
@@ -1223,33 +1314,60 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
             )}
 
             {/* ── Alerta: itens que serão recebidos por outra unidade (origem) ── */}
-            {remanejamentosOut.length > 0 && canSolicitante && (
-                <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-5 space-y-3">
+            {remanejamentosOut.length > 0 && canSolicitante && (() => {
+                const todosRecebidos = remanejamentosOut.every(r => r.destino_recebido);
+                const algumRecebido = remanejamentosOut.some(r => r.destino_recebido);
+                const containerCls = todosRecebidos
+                    ? 'bg-green-50 border-2 border-green-300'
+                    : algumRecebido
+                    ? 'bg-blue-50 border-2 border-blue-200'
+                    : 'bg-purple-50 border-2 border-purple-200';
+                const iconCls = todosRecebidos ? 'bg-green-200' : algumRecebido ? 'bg-blue-200' : 'bg-purple-200';
+                const iconColor = todosRecebidos ? 'text-green-800' : algumRecebido ? 'text-blue-800' : 'text-purple-800';
+                const titleCls = todosRecebidos ? 'text-green-900' : algumRecebido ? 'text-blue-900' : 'text-purple-900';
+                const subtitleCls = todosRecebidos ? 'text-green-700' : algumRecebido ? 'text-blue-700' : 'text-purple-700';
+                const title = todosRecebidos ? 'Itens recebidos pela unidade destino' : 'Itens em transferência';
+                const subtitle = todosRecebidos
+                    ? 'Todos os itens abaixo foram confirmados pela unidade destino. Confirme o recebimento quando chegar até você.'
+                    : 'Os itens abaixo serão recebidos por outra unidade e transferidos para você.';
+                return (
+                <div className={`${containerCls} rounded-xl p-5 space-y-3`}>
                     <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-purple-200 flex items-center justify-center shrink-0">
-                            <ArrowRightLeft className="w-5 h-5 text-purple-800" />
+                        <div className={`w-9 h-9 rounded-lg ${iconCls} flex items-center justify-center shrink-0`}>
+                            <ArrowRightLeft className={`w-5 h-5 ${iconColor}`} />
                         </div>
                         <div>
-                            <h3 className="text-sm font-bold text-purple-900">Itens recebidos por outra unidade</h3>
-                            <p className="text-xs text-purple-700 mt-0.5">Os itens abaixo serão recebidos por outra unidade e transferidos para você.</p>
+                            <h3 className={`text-sm font-bold ${titleCls}`}>{title}</h3>
+                            <p className={`text-xs ${subtitleCls} mt-0.5`}>{subtitle}</p>
                         </div>
                     </div>
                     <div className="space-y-1.5">
                         {remanejamentosOut.map(r => {
                             const itemMatch = items.find(i => i.item_id === r.item_id);
+                            const rowBorder = r.destino_recebido ? 'border-green-200' : 'border-slate-200';
                             return (
-                                <div key={r.id} className="flex items-center gap-3 bg-white rounded-lg border border-purple-200 px-4 py-2.5">
-                                    <span className="text-sm font-bold text-purple-800 min-w-[50px]">{r.quantidade} un.</span>
+                                <div key={r.id} className={`flex items-center gap-3 bg-white rounded-lg border ${rowBorder} px-4 py-2.5`}>
+                                    <span className="text-sm font-bold text-slate-700 min-w-[50px]">{r.quantidade} un.</span>
                                     <span className="text-sm text-slate-700 font-medium flex-1 truncate">{itemMatch?.itens.nome || '—'}</span>
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-purple-100 text-purple-700 shrink-0">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-slate-100 text-slate-600 shrink-0">
                                         via {r.destino_unidade_nome} (#{r.destino_pedido_numero})
                                     </span>
+                                    {r.destino_recebido ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-green-100 text-green-700 shrink-0">
+                                            <CheckCircle2 className="w-3 h-3" /> Recebido por {r.destino_unidade_nome}
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-slate-100 text-slate-500 shrink-0">
+                                            <Clock className="w-3 h-3" /> Aguardando {r.destino_unidade_nome}
+                                        </span>
+                                    )}
                                 </div>
                             );
                         })}
                     </div>
                 </div>
-            )}
+                );
+            })()}
 
             {/* ── Alerta: itens para transferir para outra unidade (destino) ── */}
             {remanejamentosIn.length > 0 && canSolicitante && (
@@ -1377,10 +1495,14 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                         <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Qtd Recebida</th>
                                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Status</th>
                                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase"></th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-amber-600 uppercase">Divergência / Item Recebido</th>
                                     </>
                                 )}
                                 {status === 'Recebido' && (
-                                    <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Qtd Recebida</th>
+                                    <>
+                                        <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Qtd Recebida</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-amber-600 uppercase">Divergência</th>
+                                    </>
                                 )}
                                 {editing && (
                                     <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase w-10"></th>
@@ -1400,9 +1522,9 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                 </tr>
                             ) : displayItems.filter(item => !editDeleted.has(item.id)).map((item, idx) => {
                                 const situacao  = getSituacao(item.quantidade_atendida, item.quantidade);
-                                const recebidaVal = itemQtyEdit[item.id] ?? item.quantidade_recebida;
-                                const reception = getRecebimentoStatus(recebidaVal, item.quantidade_atendida);
                                 const confirmed = itemConfirmed[item.id] ?? false;
+                                const recebidaVal = confirmed ? (itemQtyEdit[item.id] ?? 0) : item.quantidade_recebida;
+                                const reception = getRecebimentoStatus(recebidaVal, item.quantidade_atendida);
                                 const rowBg = status === 'Realizado'
                                     ? situacao === 'atendido' ? 'bg-green-50/50' : situacao === 'parcial' ? 'bg-yellow-50/60' : 'bg-red-50/50'
                                     : status === 'Recebido'
@@ -1422,7 +1544,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                             </td>
                                         )}
 
-                                        <td className="px-4 py-3.5 text-slate-800 font-medium max-w-xs truncate">{item.itens.nome}</td>
+                                        <td className="px-4 py-3.5 text-slate-800 font-medium min-w-[180px] max-w-[260px] truncate">{item.itens.nome}</td>
                                         <td className="px-4 py-3.5 text-slate-500 font-mono">{item.itens.codigo}</td>
                                         <td className="px-4 py-3.5 text-right font-semibold text-slate-900">
                                             {editing ? (
@@ -1518,26 +1640,105 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                                     {reception === 'nao_recebido' && <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-red-100 text-red-600">✕ Não recebido</span>}
                                                 </td>
                                                 <td className="px-4 py-3.5 text-center">
-                                                    <label className="inline-flex items-center gap-2 cursor-pointer select-none">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={confirmed}
-                                                            onChange={() => setItemConfirmed(p => ({ ...p, [item.id]: !confirmed }))}
-                                                            className="w-4 h-4 rounded border-slate-300 text-green-600 focus:ring-green-500 cursor-pointer"
-                                                        />
-                                                        <span className={`text-xs font-semibold ${confirmed ? 'text-green-700' : 'text-slate-400'}`}>
-                                                            {confirmed ? 'Confirmado' : 'Confirmar'}
-                                                        </span>
-                                                    </label>
+                                                    {itemObservacoes[item.id]?.trim() && !itemRecebidoId[item.id] ? (
+                                                        <span className="text-[11px] text-amber-600 font-medium">Selecione o item →</span>
+                                                    ) : (
+                                                        <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={confirmed}
+                                                                onChange={() => setItemConfirmed(p => ({ ...p, [item.id]: !confirmed }))}
+                                                                className="w-4 h-4 rounded border-slate-300 text-green-600 focus:ring-green-500 cursor-pointer"
+                                                            />
+                                                            <span className={`text-xs font-semibold ${confirmed ? 'text-green-700' : 'text-slate-400'}`}>
+                                                                {confirmed ? 'Confirmado' : 'Confirmar'}
+                                                            </span>
+                                                        </label>
+                                                    )}
+                                                </td>
+                                                {/* Campo de divergência */}
+                                                <td className="px-4 py-3.5 min-w-[240px]">
+                                                    {!itemDivOpen[item.id] ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setItemDivOpen(p => ({ ...p, [item.id]: true }))}
+                                                            className="inline-flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-800 hover:bg-amber-50 px-2 py-1 rounded-md transition-colors"
+                                                        >
+                                                            <AlertTriangle className="w-3.5 h-3.5" />
+                                                            Registrar divergência
+                                                        </button>
+                                                    ) : (
+                                                        <div className="flex flex-col gap-1.5">
+                                                            <div className="flex items-center gap-1">
+                                                                <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
+                                                                <span className="text-[11px] font-semibold text-amber-700">Observação</span>
+                                                                {!itemObservacoes[item.id] && (
+                                                                    <button type="button" onClick={() => setItemDivOpen(p => ({ ...p, [item.id]: false }))} className="ml-auto text-slate-300 hover:text-slate-500">
+                                                                        <X className="w-3 h-3" />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                            <textarea
+                                                                value={itemObservacoes[item.id] || ''}
+                                                                onChange={e => {
+                                                                    setItemObservacoes(p => ({ ...p, [item.id]: e.target.value }));
+                                                                    if (!e.target.value.trim()) {
+                                                                        setItemRecebidoId(p => { const n = { ...p }; delete n[item.id]; return n; });
+                                                                        setItemConfirmed(p => ({ ...p, [item.id]: false }));
+                                                                    }
+                                                                }}
+                                                                placeholder="Ex: Recebido comprimido, solicitado frasco"
+                                                                className="w-full text-xs border border-amber-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-amber-50 resize-none placeholder-amber-400"
+                                                                rows={2}
+                                                            />
+                                                            {itemObservacoes[item.id]?.trim() && (
+                                                                <div className="flex flex-col gap-1">
+                                                                    <span className="text-[11px] font-semibold text-slate-600">Item efetivamente recebido:</span>
+                                                                    <select
+                                                                        value={itemRecebidoId[item.id] || ''}
+                                                                        onChange={e => {
+                                                                            setItemRecebidoId(p => ({ ...p, [item.id]: e.target.value }));
+                                                                            setItemConfirmed(p => ({ ...p, [item.id]: false }));
+                                                                        }}
+                                                                        className="w-full text-xs border border-slate-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#001A72] bg-white"
+                                                                    >
+                                                                        <option value="">Selecione o item recebido...</option>
+                                                                        {catalogItens.map(ci => (
+                                                                            <option key={ci.id} value={ci.id}>{ci.codigo} — {ci.nome}</option>
+                                                                        ))}
+                                                                    </select>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                 </td>
                                             </>
                                         )}
 
-                                        {/* Qty received — read-only after Recebido */}
+                                        {/* Qty received + divergência — read-only after Recebido */}
                                         {status === 'Recebido' && (
-                                            <td className="px-4 py-3.5 text-right font-semibold text-slate-700">
-                                                {item.quantidade_recebida}
-                                            </td>
+                                            <>
+                                                <td className="px-4 py-3.5 text-right font-semibold text-slate-700">
+                                                    {item.quantidade_recebida}
+                                                </td>
+                                                <td className="px-4 py-3.5">
+                                                    {item.observacao_recebimento ? (
+                                                        <div className="flex flex-col gap-1">
+                                                            <div className="inline-flex items-start gap-1.5 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 max-w-[280px]">
+                                                                <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                                                                <span className="text-xs text-amber-800">{item.observacao_recebimento}</span>
+                                                            </div>
+                                                            {item.item_recebido && (
+                                                                <div className="inline-flex items-start gap-1.5 bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-1.5 max-w-[280px]">
+                                                                    <span className="text-[11px] text-blue-800"><span className="font-semibold">Recebido:</span> {item.item_recebido.codigo} — {item.item_recebido.nome}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-slate-300 text-xs">—</span>
+                                                    )}
+                                                </td>
+                                            </>
                                         )}
 
                                         {/* Delete button — inline editing */}
@@ -1563,23 +1764,54 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
 
             {/* Confirmar Recebimento — solicitante, status Realizado */}
             {canSolicitante && status === 'Realizado' && (
-                <div className="flex items-center justify-between bg-white rounded-xl shadow-sm border border-slate-100 px-6 py-4">
-                    {!allReceptionSet && (
-                        <p className="text-xs text-slate-500">Confirme cada item acima antes de salvar o recebimento.</p>
-                    )}
-                    {allReceptionSet && <span />}
-                    <button
-                        onClick={() => setConfirmAction({
-                            title: 'Confirmar recebimento do pedido?',
-                            description: 'As quantidades recebidas serão salvas e o pedido será marcado como "Recebido".',
-                            action: handleSaveRecebimento,
-                        })}
-                        disabled={saving || !allReceptionSet}
-                        className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                    >
-                        {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                        {saving ? 'Salvando...' : 'Confirmar Recebimento'}
-                    </button>
+                <div className="flex items-center justify-between bg-white rounded-xl shadow-sm border border-slate-100 px-6 py-4 gap-4">
+                    <div>
+                        {hasBlockingDivergencias ? (
+                            <p className="text-xs font-semibold text-amber-600 flex items-center gap-1.5">
+                                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                Selecione o item efetivamente recebido nos itens com divergência.
+                            </p>
+                        ) : !allReceptionSet ? (
+                            <p className="text-xs text-slate-500">Confirme todos os itens para finalizar, ou salve o progresso parcial.</p>
+                        ) : items.some(i => itemObservacoes[i.id]?.trim()) ? (
+                            <p className="text-xs font-semibold text-amber-600 flex items-center gap-1.5">
+                                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                Atenção: {items.filter(i => itemObservacoes[i.id]?.trim()).length} item(s) com divergência serão registrados com item diferente do solicitado.
+                            </p>
+                        ) : (
+                            <span />
+                        )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                        {!allReceptionSet && (
+                            <button
+                                onClick={() => handleSaveRecebimento(false)}
+                                disabled={saving || !items.some(i => itemConfirmed[i.id])}
+                                className="flex items-center gap-2 px-4 py-2.5 border border-slate-300 text-slate-600 rounded-lg font-medium hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                            >
+                                {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                Salvar progresso
+                            </button>
+                        )}
+                        <button
+                            onClick={() => {
+                                const divItems = items.filter(i => itemObservacoes[i.id]?.trim() && itemRecebidoId[i.id]);
+                                const desc = divItems.length > 0
+                                    ? `ATENÇÃO: ${divItems.length} item(s) serão confirmados com item diferente do solicitado. Essas divergências serão registradas e aparecerão nos relatórios. Deseja confirmar o recebimento?`
+                                    : 'As quantidades recebidas serão salvas e o pedido será marcado como "Recebido".';
+                                setConfirmAction({
+                                    title: 'Confirmar recebimento do pedido?',
+                                    description: desc,
+                                    action: () => handleSaveRecebimento(true),
+                                });
+                            }}
+                            disabled={saving || !allReceptionSet}
+                            className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                        >
+                            {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                            {saving ? 'Salvando...' : 'Confirmar Recebimento'}
+                        </button>
+                    </div>
                 </div>
             )}
 
@@ -1588,7 +1820,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                 <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
                     <div className="px-6 py-4 flex flex-wrap gap-2 items-center">
                         <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide mr-2">Alterar status:</span>
-                        {STEPS.filter(s => s !== status).map(s => {
+                        {STEPS.filter(s => s !== status && s !== 'Recebido').map(s => {
                             const stepIdx = STEPS.indexOf(s);
                             const currentIdx = STEPS.indexOf(status);
                             const isBack = stepIdx < currentIdx;

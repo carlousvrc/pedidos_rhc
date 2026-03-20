@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import type { Usuario } from '@/lib/auth';
-import { ArrowRightLeft, RefreshCw, Package, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { ArrowRightLeft, RefreshCw, Package, ChevronRight, CheckCircle2, Clock } from 'lucide-react';
+import ConfirmModal from '@/app/components/ConfirmModal';
 
 interface TransferenciasClientProps {
     currentUser: Usuario;
@@ -15,6 +16,7 @@ interface TransferenciaItem {
     pedido_item_origem_id: string;
     quantidade: number;
     quantidade_recebida: number;
+    destino_recebido: boolean;
     item_id: string;
     created_at: string;
     item_nome: string;
@@ -33,6 +35,7 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
     const [loading, setLoading] = useState(true);
     const [qtyEdits, setQtyEdits] = useState<Record<string, number>>({});
     const [saving, setSaving] = useState<Record<string, boolean>>({});
+    const [confirmPending, setConfirmPending] = useState<TransferenciaItem | null>(null);
 
     const unidadeId = currentUser.unidade_id;
     const role = currentUser.role;
@@ -88,6 +91,16 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
                 if (u) destinoUnidade = u.nome;
             }
 
+            const { data: destPedItem } = await supabase
+                .from('pedidos_itens')
+                .select('quantidade_recebida, quantidade_atendida')
+                .eq('pedido_id', r.pedido_destino_id)
+                .eq('item_id', r.item_id)
+                .maybeSingle();
+            const destinoRecebido = destPedItem
+                ? destPedItem.quantidade_recebida >= destPedItem.quantidade_atendida && destPedItem.quantidade_atendida > 0
+                : false;
+
             if (!showAll && unidadeId) {
                 if (origemUnidadeId !== unidadeId && destinoUnidadeId !== unidadeId) continue;
             }
@@ -97,6 +110,7 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
                 pedido_item_origem_id: r.pedido_item_origem_id,
                 quantidade: r.quantidade,
                 quantidade_recebida: r.quantidade_recebida ?? 0,
+                destino_recebido: destinoRecebido,
                 item_id: r.item_id,
                 created_at: r.created_at,
                 item_nome: item?.nome || '—',
@@ -179,7 +193,8 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
 
     // Check if current user can confirm receipt (they are the origin unit — items coming to them)
     function canConfirm(t: TransferenciaItem): boolean {
-        if (showAll) return true;
+        if (role === 'admin') return true;
+        if (role === 'comprador') return false;
         return unidadeId === t.origem_unidade_id;
     }
 
@@ -193,19 +208,35 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
 
     return (
         <div className="max-w-[1200px] mx-auto p-4 sm:p-6 space-y-6">
+            {confirmPending && (
+                <ConfirmModal
+                    title="Confirmar recebimento por transferência?"
+                    description={`Você confirma o recebimento de ${qtyEdits[confirmPending.id] ?? confirmPending.quantidade} un. de "${confirmPending.item_nome}" transferido por ${confirmPending.destino_unidade_nome}?`}
+                    variant="primary"
+                    confirmLabel="Confirmar recebimento"
+                    onConfirm={() => { handleConfirmRecebimento(confirmPending); setConfirmPending(null); }}
+                    onCancel={() => setConfirmPending(null)}
+                />
+            )}
             <div>
                 <div className="flex items-center text-xs text-slate-500 gap-2 mb-4">
                     <Link href="/" className="hover:text-[#001A72] transition-colors">Dashboard</Link>
                     <ChevronRight className="w-3 h-3" />
                     <span className="text-slate-800 font-medium">Transferências</span>
                 </div>
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                        <ArrowRightLeft className="w-5 h-5 text-purple-700" />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-bold text-slate-900">Transferências</h1>
-                        <p className="text-sm text-slate-500">Itens remanejados entre pedidos de diferentes unidades</p>
+                <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-purple-600 flex items-center justify-center shadow-sm">
+                            <ArrowRightLeft className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-bold text-slate-900">Transferências</h1>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                                {transferencias.length > 0
+                                    ? `${transferencias.length} transferência${transferencias.length !== 1 ? 's' : ''} · ${transferencias.filter(t => t.quantidade_recebida === 0).length} pendente${transferencias.filter(t => t.quantidade_recebida === 0).length !== 1 ? 's' : ''}`
+                                    : 'Itens remanejados entre pedidos de diferentes unidades'}
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -225,8 +256,8 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
                                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Item</th>
                                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Código</th>
                                     <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Qtd</th>
-                                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">De (Origem)</th>
-                                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Para (Destino)</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">De (Envia)</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Para (Recebe)</th>
                                     <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Qtd Recebida</th>
                                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Status</th>
                                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Data</th>
@@ -234,12 +265,13 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
                             </thead>
                             <tbody className="bg-white divide-y divide-slate-100">
                                 {transferencias.map(t => {
-                                    const recebido = t.quantidade_recebida > 0;
-                                    const canEdit = canConfirm(t) && !recebido;
+                                    const concluido = t.quantidade_recebida > 0;
+                                    const emTransito = !concluido && t.destino_recebido;
+                                    const canEdit = canConfirm(t) && !concluido && t.destino_recebido;
                                     const isSaving = saving[t.id] ?? false;
 
                                     return (
-                                        <tr key={t.id} className={`transition-colors ${recebido ? 'bg-green-50/40' : 'hover:bg-purple-50/40'}`}>
+                                        <tr key={t.id} className={`transition-colors ${concluido ? 'bg-green-50/40' : emTransito ? 'bg-blue-50/40' : 'hover:bg-purple-50/40'}`}>
                                             <td className="px-4 py-3.5 text-slate-800 font-medium max-w-[250px] truncate">
                                                 {t.item_nome}
                                             </td>
@@ -253,19 +285,19 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
                                             </td>
                                             <td className="px-4 py-3.5">
                                                 <div className="flex flex-col gap-0.5">
-                                                    <span className="text-xs font-semibold text-slate-700">{t.origem_unidade_nome}</span>
-                                                    <Link href={`/dashboard/pedidos/${t.origem_pedido_id}`}
+                                                    <span className="text-xs font-semibold text-slate-700">{t.destino_unidade_nome}</span>
+                                                    <Link href={`/dashboard/pedidos/${t.destino_pedido_id}`}
                                                         className="text-[#001A72] hover:underline text-[11px]">
-                                                        Pedido #{t.origem_pedido_numero}
+                                                        Pedido #{t.destino_pedido_numero}
                                                     </Link>
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3.5">
                                                 <div className="flex flex-col gap-0.5">
-                                                    <span className="text-xs font-semibold text-slate-700">{t.destino_unidade_nome}</span>
-                                                    <Link href={`/dashboard/pedidos/${t.destino_pedido_id}`}
+                                                    <span className="text-xs font-semibold text-slate-700">{t.origem_unidade_nome}</span>
+                                                    <Link href={`/dashboard/pedidos/${t.origem_pedido_id}`}
                                                         className="text-[#001A72] hover:underline text-[11px]">
-                                                        Pedido #{t.destino_pedido_numero}
+                                                        Pedido #{t.origem_pedido_numero}
                                                     </Link>
                                                 </div>
                                             </td>
@@ -281,7 +313,7 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
                                                             className="w-20 border border-slate-200 rounded px-2 py-1 text-xs text-right font-semibold focus:outline-none focus:ring-2 focus:ring-[#001A72]"
                                                         />
                                                         <button
-                                                            onClick={() => handleConfirmRecebimento(t)}
+                                                            onClick={() => setConfirmPending(t)}
                                                             disabled={isSaving}
                                                             className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors disabled:opacity-50"
                                                         >
@@ -289,20 +321,24 @@ export default function TransferenciasClient({ currentUser }: TransferenciasClie
                                                             Confirmar
                                                         </button>
                                                     </div>
-                                                ) : recebido ? (
+                                                ) : concluido ? (
                                                     <span className="font-semibold text-green-700">{t.quantidade_recebida}</span>
                                                 ) : (
                                                     <span className="text-slate-400">—</span>
                                                 )}
                                             </td>
                                             <td className="px-4 py-3.5">
-                                                {recebido ? (
+                                                {concluido ? (
                                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-green-100 text-green-700">
-                                                        <CheckCircle2 className="w-3 h-3" /> Recebido
+                                                        <CheckCircle2 className="w-3 h-3" /> Concluído
+                                                    </span>
+                                                ) : emTransito ? (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-blue-100 text-blue-700">
+                                                        <Clock className="w-3 h-3" /> Aguardando transferência
                                                     </span>
                                                 ) : (
                                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-orange-100 text-orange-700">
-                                                        Pendente
+                                                        <Clock className="w-3 h-3" /> Pendente
                                                     </span>
                                                 )}
                                             </td>

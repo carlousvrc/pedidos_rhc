@@ -25,7 +25,7 @@ export default async function EditarPedidoPage({ params }: { params: Promise<{ i
 
     const { data: pedidoItens } = await supabase
         .from('pedidos_itens')
-        .select('id, quantidade, itens(id, codigo, referencia, nome, tipo)')
+        .select('id, quantidade, itens!item_id(id, codigo, referencia, nome, tipo)')
         .eq('pedido_id', id);
 
     return (

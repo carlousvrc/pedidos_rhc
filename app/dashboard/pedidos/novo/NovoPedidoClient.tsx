@@ -63,8 +63,20 @@ interface Props {
 }
 
 export default function NovoPedidoClient({ currentUser }: Props) {
+    const canCreate = !currentUser || currentUser?.permissoes?.modulos?.criar_pedido !== false;
     const isOperador = (currentUser?.permissoes?.scope ?? 'operador') === 'operador';
     const userUnidadeId = currentUser?.unidade_id ?? null;
+
+    if (!canCreate) {
+        return (
+            <div className="max-w-lg mx-auto mt-20 text-center space-y-4">
+                <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 font-medium">
+                    Você não tem permissão para criar novos pedidos.
+                </div>
+                <Link href="/" className="inline-block text-sm text-[#001A72] hover:underline">← Voltar ao Dashboard</Link>
+            </div>
+        );
+    }
 
     const [unidades, setUnidades] = useState<any[]>([]);
     const [itens, setItens] = useState<any[]>([]);
