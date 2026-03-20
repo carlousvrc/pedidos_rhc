@@ -6,6 +6,7 @@ export interface Permissoes {
     scope: 'operador' | 'admin';
     modulos: {
         pedidos: boolean;
+        criar_pedido?: boolean;
         historico: boolean;
         itens: boolean;
         relatorios: boolean;
