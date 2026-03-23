@@ -27,6 +27,7 @@ interface PedidoItem {
     quantidade_atendida: number;
     quantidade_recebida: number;
     fornecedor?: string;
+    valor_unitario?: number;
     item_nome?: string;
     item_codigo?: string;
     observacao_recebimento?: string;
@@ -112,7 +113,7 @@ export default function RelatoriosPage() {
         setTotalQtdRemanejada((rems || []).reduce((s, r) => s + r.quantidade, 0));
         const { data: pis } = await supabase
             .from('pedidos_itens')
-            .select('id, pedido_id, item_id, quantidade, quantidade_atendida, quantidade_recebida, fornecedor, observacao_recebimento, item_recebido_id, itens!item_id(nome, codigo), item_recebido:itens!item_recebido_id(nome, codigo)');
+            .select('id, pedido_id, item_id, quantidade, quantidade_atendida, quantidade_recebida, fornecedor, valor_unitario, observacao_recebimento, item_recebido_id, itens!item_id(nome, codigo), item_recebido:itens!item_recebido_id(nome, codigo)');
         setPedidoItens((pis || []).map((pi: any) => ({
             ...pi,
             item_nome: pi.itens?.nome || '—',
@@ -167,12 +168,24 @@ export default function RelatoriosPage() {
     const taxaAtendimento = totalItensQtd > 0 ? Math.round((totalAtendida / totalItensQtd) * 100) : 0;
     const taxaRecebimento = totalAtendida > 0 ? Math.round((totalRecebida / totalAtendida) * 100) : 0;
 
+    // Valores financeiros
+    const valorTotalSolicitado = filteredItens.reduce((s, i) => s + (i.valor_unitario || 0) * i.quantidade, 0);
+    const valorTotalAtendido = filteredItens.reduce((s, i) => s + (i.valor_unitario || 0) * i.quantidade_atendida, 0);
+    const valorTotalRecebido = filteredItens.reduce((s, i) => s + (i.valor_unitario || 0) * i.quantidade_recebida, 0);
+    const fmtR$ = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
     const topItens = useMemo(() => {
-        const map = new Map<string, { nome: string; codigo: string; qtd: number }>();
+        const map = new Map<string, { nome: string; codigo: string; qtd: number; valor_unitario: number; valor_total: number }>();
         for (const pi of filteredItens) {
             const ex = map.get(pi.item_id);
-            if (ex) ex.qtd += pi.quantidade;
-            else map.set(pi.item_id, { nome: pi.item_nome || '—', codigo: pi.item_codigo || '—', qtd: pi.quantidade });
+            const vu = pi.valor_unitario || 0;
+            if (ex) {
+                ex.qtd += pi.quantidade;
+                ex.valor_total += vu * pi.quantidade;
+                if (!ex.valor_unitario && vu) ex.valor_unitario = vu;
+            } else {
+                map.set(pi.item_id, { nome: pi.item_nome || '—', codigo: pi.item_codigo || '—', qtd: pi.quantidade, valor_unitario: vu, valor_total: vu * pi.quantidade });
+            }
         }
         return Array.from(map.values()).sort((a, b) => b.qtd - a.qtd).slice(0, 10);
     }, [filteredItens]);
@@ -541,6 +554,42 @@ export default function RelatoriosPage() {
                 </div>
             </div>
 
+            {/* ── Valores Financeiros ── */}
+            {valorTotalSolicitado > 0 && (
+                <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
+                    <div className="flex items-center gap-2 mb-4">
+                        <TrendingUp className="w-4 h-4 text-emerald-600" />
+                        <h3 className="text-sm font-bold text-slate-800">Valores Financeiros</h3>
+                        <span className="ml-auto text-[11px] text-slate-400">Baseado no valor unitário dos itens</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="bg-blue-50 rounded-xl p-4">
+                            <p className="text-[11px] font-semibold text-blue-500 uppercase tracking-wide">Valor Solicitado</p>
+                            <p className="text-2xl font-bold text-[#001A72] mt-1">{fmtR$(valorTotalSolicitado)}</p>
+                            <p className="text-[11px] text-blue-400 mt-1">{totalItensQtd.toLocaleString('pt-BR')} unidades</p>
+                        </div>
+                        <div className="bg-amber-50 rounded-xl p-4">
+                            <p className="text-[11px] font-semibold text-amber-500 uppercase tracking-wide">Valor Atendido</p>
+                            <p className="text-2xl font-bold text-amber-700 mt-1">{fmtR$(valorTotalAtendido)}</p>
+                            <p className="text-[11px] text-amber-400 mt-1">{totalAtendida.toLocaleString('pt-BR')} unidades · {valorTotalSolicitado > 0 ? Math.round((valorTotalAtendido / valorTotalSolicitado) * 100) : 0}% do solicitado</p>
+                        </div>
+                        <div className="bg-emerald-50 rounded-xl p-4">
+                            <p className="text-[11px] font-semibold text-emerald-500 uppercase tracking-wide">Valor Recebido</p>
+                            <p className="text-2xl font-bold text-emerald-700 mt-1">{fmtR$(valorTotalRecebido)}</p>
+                            <p className="text-[11px] text-emerald-400 mt-1">{totalRecebida.toLocaleString('pt-BR')} unidades · {valorTotalAtendido > 0 ? Math.round((valorTotalRecebido / valorTotalAtendido) * 100) : 0}% do atendido</p>
+                        </div>
+                    </div>
+                    {valorTotalSolicitado > valorTotalAtendido && (
+                        <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2">
+                            <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                            <p className="text-xs text-red-600 font-medium">
+                                Diferença não atendida: {fmtR$(valorTotalSolicitado - valorTotalAtendido)}
+                            </p>
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* ── Top Itens + Pedidos por Unidade ── */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Top 10 Itens */}
@@ -561,9 +610,11 @@ export default function RelatoriosPage() {
                                     <p className="text-sm font-medium text-slate-800 truncate leading-tight">{item.nome}</p>
                                     <p className="text-[11px] text-slate-400 font-mono">{item.codigo}</p>
                                 </div>
-                                <div className="shrink-0 flex items-center gap-2 w-32">
-                                    <ProgressBar value={item.qtd} max={topItens[0]?.qtd || 1} color="bg-[#001A72]" height="h-1.5" />
-                                    <span className="text-sm font-bold text-slate-700 w-12 text-right">{item.qtd.toLocaleString('pt-BR')}</span>
+                                <div className="shrink-0 text-right">
+                                    <span className="text-sm font-bold text-slate-700">{item.qtd.toLocaleString('pt-BR')} un.</span>
+                                    {item.valor_total > 0 && (
+                                        <p className="text-[11px] text-emerald-600 font-medium">{item.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                                    )}
                                 </div>
                             </div>
                         ))}
