@@ -1802,22 +1802,48 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
             {/* Confirmar Recebimento — solicitante, status Realizado */}
             {canSolicitante && status === 'Realizado' && (
                 <div className="flex items-center justify-between bg-white rounded-xl shadow-sm border border-slate-100 px-6 py-4 gap-4">
-                    <div>
-                        {hasBlockingDivergencias ? (
-                            <p className="text-xs font-semibold text-amber-600 flex items-center gap-1.5">
-                                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                                Selecione o item efetivamente recebido nos itens com divergência.
-                            </p>
-                        ) : !allReceptionSet ? (
-                            <p className="text-xs text-slate-500">Confirme todos os itens para finalizar, ou salve o progresso parcial.</p>
-                        ) : items.some(i => itemObservacoes[i.id]?.trim()) ? (
-                            <p className="text-xs font-semibold text-amber-600 flex items-center gap-1.5">
-                                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                                Atenção: {items.filter(i => itemObservacoes[i.id]?.trim()).length} item(s) com divergência serão registrados com item diferente do solicitado.
-                            </p>
-                        ) : (
-                            <span />
-                        )}
+                    <div className="flex items-center gap-4 flex-wrap">
+                        {(() => {
+                            const allConfirmed = items.length > 0 && items.every(i => itemConfirmed[i.id]);
+                            return (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (allConfirmed) {
+                                            // Desmarcar todos
+                                            const next: Record<string, boolean> = {};
+                                            for (const i of items) next[i.id] = false;
+                                            setItemConfirmed(next);
+                                        } else {
+                                            // Marcar todos como confirmados + preencher qty com quantidade_atendida
+                                            const nextConf: Record<string, boolean> = {};
+                                            const nextQty: Record<string, number> = { ...itemQtyEdit };
+                                            for (const i of items) {
+                                                nextConf[i.id] = true;
+                                                if (nextQty[i.id] === undefined || nextQty[i.id] === 0) {
+                                                    nextQty[i.id] = i.quantidade_atendida;
+                                                }
+                                            }
+                                            setItemConfirmed(nextConf);
+                                            setItemQtyEdit(nextQty);
+                                        }
+                                    }}
+                                    className={`flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg border transition-colors ${
+                                        allConfirmed
+                                            ? 'bg-green-50 border-green-300 text-green-700 hover:bg-green-100'
+                                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                                    }`}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={allConfirmed}
+                                        readOnly
+                                        className="w-4 h-4 rounded border-slate-300 text-green-600 pointer-events-none"
+                                    />
+                                    {allConfirmed ? 'Desmarcar todos' : 'Selecionar todos como recebidos'}
+                                </button>
+                            );
+                        })()}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                         {!allReceptionSet && (
