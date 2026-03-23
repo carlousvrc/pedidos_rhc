@@ -11,6 +11,7 @@ import {
     AlertTriangle, MessageSquare,
 } from 'lucide-react';
 import ConfirmModal from '@/app/components/ConfirmModal';
+import NotasFiscaisSection from './NotasFiscaisSection';
 import 'tom-select/dist/css/tom-select.css';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -1876,6 +1877,16 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                         </button>
                     </div>
                 </div>
+            )}
+
+            {/* ── Notas Fiscais ──────────────────────────────────────────── */}
+            {(status === 'Realizado' || status === 'Recebido') && (
+                <NotasFiscaisSection
+                    pedidoId={id}
+                    pedidoItems={items}
+                    status={status}
+                    currentUser={currentUser}
+                />
             )}
 
             {/* ── Alterar Status ──────────────────────────────────────────── */}
