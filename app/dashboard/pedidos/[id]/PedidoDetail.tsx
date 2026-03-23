@@ -196,7 +196,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
             setPedido(supabasePedido as Pedido);
             const { data: supabaseItems, error: itemsError } = await supabase
                 .from('pedidos_itens')
-                .select('id, item_id, quantidade, quantidade_atendida, quantidade_recebida, observacao, fornecedor, valor_unitario, itens(codigo, referencia, nome, tipo)')
+                .select('*, itens!item_id(codigo, referencia, nome, tipo), item_recebido:itens!item_recebido_id(id, codigo, nome)')
                 .eq('pedido_id', id);
             if (itemsError) console.error('Erro ao carregar itens:', itemsError.message, itemsError.details, itemsError.hint, itemsError.code);
             setItems((supabaseItems as unknown as PedidoItem[]) || []);
