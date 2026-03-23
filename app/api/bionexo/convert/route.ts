@@ -188,7 +188,18 @@ function deduplicateFornecedor(raw: string): string {
 
 // ── PDF Extraction ─────────────────────────────────────────────────────────────
 
-async function parseBionexoPdf(pdfBuffer: Buffer): Promise<{ itens: Array<{ codigo: string; quantidade: number; fornecedor: string }>; fornecedor: string }> {
+function parsePrice(text: string): number {
+    if (!text) return 0;
+    // Handle "1.234,56" or "1234.56" or "1234,56"
+    let cleaned = text.trim().replace(/[^\d.,]/g, '');
+    if (cleaned.includes(',')) {
+        cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+    }
+    const n = parseFloat(cleaned);
+    return isNaN(n) ? 0 : n;
+}
+
+async function parseBionexoPdf(pdfBuffer: Buffer): Promise<{ itens: Array<{ codigo: string; quantidade: number; fornecedor: string; valor_unitario: number }>; fornecedor: string }> {
     // Dynamic import avoids SSR / module resolution issues
     const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
 
@@ -206,7 +217,7 @@ async function parseBionexoPdf(pdfBuffer: Buffer): Promise<{ itens: Array<{ codi
     });
     const pdfDoc = await loadingTask.promise;
 
-    const results: Array<{ codigo: string; quantidade: number; fornecedor: string }> = [];
+    const results: Array<{ codigo: string; quantidade: number; fornecedor: string; valor_unitario: number }> = [];
     const fornecedores: Set<string> = new Set();
     let lastColumns: Column[] | null = null;
 
@@ -295,8 +306,10 @@ async function parseBionexoPdf(pdfBuffer: Buffer): Promise<{ itens: Array<{ codi
             // (some PDFs render the name twice at different Y positions)
             const fornecedor = deduplicateFornecedor(rawFornecedor);
 
+            const valor_unitario = parsePrice(row['preco_unitario'] ?? '');
+
             if (fornecedor) fornecedores.add(fornecedor);
-            if (codigo) results.push({ codigo, quantidade, fornecedor });
+            if (codigo) results.push({ codigo, quantidade, fornecedor, valor_unitario });
         }
     }
 

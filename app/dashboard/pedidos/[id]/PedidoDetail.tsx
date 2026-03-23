@@ -30,6 +30,7 @@ interface PedidoItem {
     observacao_recebimento?: string;
     item_recebido_id?: string | null;
     fornecedor?: string;
+    valor_unitario?: number;
     itens: { codigo: string; referencia: string; nome: string; tipo?: string };
     item_recebido?: { id: string; codigo: string; nome: string } | null;
 }
@@ -136,7 +137,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     const [processingPdf, setProcessingPdf] = useState(false);
     const [pdfFiles,      setPdfFiles]      = useState<File[]>([]);
     const [pdfError,      setPdfError]      = useState('');
-    const [previewBionexo, setPreviewBionexo] = useState<Array<{ codigo: string; quantidade: number; fornecedor: string }> | null>(null);
+    const [previewBionexo, setPreviewBionexo] = useState<Array<{ codigo: string; quantidade: number; fornecedor: string; valor_unitario: number }> | null>(null);
     const [previewFornecedor, setPreviewFornecedor] = useState('');
 
     // Solicitante item-level reception
@@ -146,6 +147,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
     const [catalogItens, setCatalogItens] = useState<{id: string; codigo: string; nome: string}[]>([]);
     const [itemRecebidoId, setItemRecebidoId] = useState<Record<string, string>>({});
     const [filterFornecedor, setFilterFornecedor] = useState('');
+    const [filterSituacao, setFilterSituacao] = useState('');
 
     // Inline editing
     const [editing, setEditing] = useState(false);
@@ -194,7 +196,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
             setPedido(supabasePedido as Pedido);
             const { data: supabaseItems, error: itemsError } = await supabase
                 .from('pedidos_itens')
-                .select('*, itens!item_id(codigo, referencia, nome, tipo), item_recebido:itens!item_recebido_id(id, codigo, nome)')
+                .select('id, item_id, quantidade, quantidade_atendida, quantidade_recebida, observacao, fornecedor, valor_unitario, itens(codigo, referencia, nome, tipo)')
                 .eq('pedido_id', id);
             if (itemsError) console.error('Erro ao carregar itens:', itemsError.message, itemsError.details, itemsError.hint, itemsError.code);
             setItems((supabaseItems as unknown as PedidoItem[]) || []);
@@ -362,7 +364,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
         setPreviewBionexo(null);
         setPreviewFornecedor('');
         try {
-            const mergedMap: Record<string, { quantidade: number; fornecedor: string }> = {};
+            const mergedMap: Record<string, { quantidade: number; fornecedor: string; valor_unitario: number }> = {};
             const fornecedores: Set<string> = new Set();
             for (const file of files) {
                 const formData = new FormData();
@@ -370,7 +372,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                 const res  = await fetch('/api/bionexo/convert', { method: 'POST', body: formData });
                 const json = await res.json();
                 if (!res.ok) throw new Error(`${file.name}: ${json.error || 'Erro ao processar PDF.'}`);
-                for (const it of (json.itens as Array<{ codigo: string; quantidade: number; fornecedor: string }>) ?? []) {
+                for (const it of (json.itens as Array<{ codigo: string; quantidade: number; fornecedor: string; valor_unitario: number }>) ?? []) {
                     if (mergedMap[it.codigo]) {
                         mergedMap[it.codigo].quantidade += it.quantidade;
                         if (it.fornecedor && !mergedMap[it.codigo].fornecedor) {
@@ -378,13 +380,16 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                         } else if (it.fornecedor && mergedMap[it.codigo].fornecedor && !mergedMap[it.codigo].fornecedor.includes(it.fornecedor)) {
                             mergedMap[it.codigo].fornecedor += `, ${it.fornecedor}`;
                         }
+                        if (it.valor_unitario && !mergedMap[it.codigo].valor_unitario) {
+                            mergedMap[it.codigo].valor_unitario = it.valor_unitario;
+                        }
                     } else {
-                        mergedMap[it.codigo] = { quantidade: it.quantidade, fornecedor: it.fornecedor || '' };
+                        mergedMap[it.codigo] = { quantidade: it.quantidade, fornecedor: it.fornecedor || '', valor_unitario: it.valor_unitario || 0 };
                     }
                 }
                 if (json.fornecedor) fornecedores.add(json.fornecedor);
             }
-            setPreviewBionexo(Object.entries(mergedMap).map(([codigo, v]) => ({ codigo, quantidade: v.quantidade, fornecedor: v.fornecedor })));
+            setPreviewBionexo(Object.entries(mergedMap).map(([codigo, v]) => ({ codigo, quantidade: v.quantidade, fornecedor: v.fornecedor, valor_unitario: v.valor_unitario })));
             setPreviewFornecedor(Array.from(fornecedores).join(', '));
         } catch (err: any) {
             setPdfError(err.message || 'Erro ao processar PDF.');
@@ -415,14 +420,14 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
 
     // ── Preview comparison (before confirming) ────────────────────────────────
 
-    const previewMap = useMemo<Record<string, { quantidade: number; fornecedor: string }>>(() => {
+    const previewMap = useMemo<Record<string, { quantidade: number; fornecedor: string; valor_unitario: number }>>(() => {
         if (!previewBionexo) return {};
-        const m: Record<string, { quantidade: number; fornecedor: string }> = {};
+        const m: Record<string, { quantidade: number; fornecedor: string; valor_unitario: number }> = {};
         for (const it of previewBionexo) {
             if (m[it.codigo]) {
                 m[it.codigo].quantidade += it.quantidade;
             } else {
-                m[it.codigo] = { quantidade: it.quantidade, fornecedor: it.fornecedor || '' };
+                m[it.codigo] = { quantidade: it.quantidade, fornecedor: it.fornecedor || '', valor_unitario: it.valor_unitario || 0 };
             }
         }
         return m;
@@ -434,6 +439,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
             ...item,
             preview_atendida: previewMap[item.itens.codigo]?.quantidade ?? 0,
             preview_fornecedor: previewMap[item.itens.codigo]?.fornecedor ?? '',
+            preview_valor_unitario: previewMap[item.itens.codigo]?.valor_unitario ?? 0,
         }));
     }, [previewBionexo, previewMap, items]);
 
@@ -447,7 +453,8 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                 const entry = previewMap[item.itens.codigo];
                 const quantidade_atendida = entry?.quantidade ?? 0;
                 const fornecedor = entry?.fornecedor || null;
-                await supabase.from('pedidos_itens').update({ quantidade_atendida, fornecedor }).eq('id', item.id);
+                const valor_unitario = entry?.valor_unitario ?? 0;
+                await supabase.from('pedidos_itens').update({ quantidade_atendida, fornecedor, valor_unitario }).eq('id', item.id);
             }
             const updateData: any = { status: 'Realizado' };
             if (previewFornecedor) updateData.fornecedor = previewFornecedor;
@@ -1254,9 +1261,9 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                                     <th className="px-4 py-2 text-left text-xs font-bold text-slate-500 uppercase">Produto</th>
                                                     <th className="px-4 py-2 text-left text-xs font-bold text-slate-500 uppercase">Código</th>
                                                     <th className="px-4 py-2 text-left text-xs font-bold text-slate-500 uppercase">Fornecedor</th>
+                                                    <th className="px-4 py-2 text-right text-xs font-bold text-slate-500 uppercase">Vlr Unit.</th>
                                                     <th className="px-4 py-2 text-right text-xs font-bold text-slate-500 uppercase">Pedido</th>
                                                     <th className="px-4 py-2 text-right text-xs font-bold text-slate-500 uppercase">Atendido</th>
-                                                    <th className="px-4 py-2 text-right text-xs font-bold text-slate-500 uppercase">Dif.</th>
                                                     <th className="px-4 py-2 text-left text-xs font-bold text-slate-500 uppercase">Situação</th>
                                                 </tr>
                                             </thead>
@@ -1269,9 +1276,9 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                                             <td className="px-4 py-2 text-slate-800 font-medium max-w-[200px] truncate">{item.itens.nome}</td>
                                                             <td className="px-4 py-2 text-slate-500 font-mono text-xs">{item.itens.codigo}</td>
                                                             <td className="px-4 py-2 text-xs text-slate-600 max-w-[150px] truncate">{(item as any).preview_fornecedor || '—'}</td>
+                                                            <td className="px-4 py-2 text-right text-xs text-slate-600">{(item as any).preview_valor_unitario ? `R$ ${((item as any).preview_valor_unitario as number).toFixed(2).replace('.', ',')}` : '—'}</td>
                                                             <td className="px-4 py-2 text-right font-semibold text-slate-800">{item.quantidade}</td>
                                                             <td className={`px-4 py-2 text-right font-semibold ${sit === 'atendido' ? 'text-green-700' : sit === 'parcial' ? 'text-yellow-700' : 'text-red-600'}`}>{item.preview_atendida}</td>
-                                                            <td className={`px-4 py-2 text-right font-semibold text-xs ${diff < 0 ? 'text-red-600' : diff > 0 ? 'text-green-700' : 'text-slate-400'}`}>{diff > 0 ? `+${diff}` : diff === 0 ? '—' : diff}</td>
                                                             <td className="px-4 py-2">
                                                                 {sit === 'atendido'    && <span className="text-[11px] font-semibold text-green-700">✓ Atendido</span>}
                                                                 {sit === 'parcial'     && <span className="text-[11px] font-semibold text-yellow-700">~ Parcial</span>}
@@ -1444,29 +1451,50 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                     );
                 })()}
 
-                {/* Filtro por fornecedor */}
+                {/* Filtros por fornecedor e situação */}
                 {status !== 'Pendente' && status !== 'Aguardando Aprovação' && (() => {
                     const fornecedores = [...new Set(items.map(i => i.fornecedor).filter(Boolean))] as string[];
-                    if (fornecedores.length <= 1) return null;
+                    const showFornecedor = fornecedores.length > 1;
+                    const showSituacao = items.some(i => i.quantidade_atendida > 0);
+                    if (!showFornecedor && !showSituacao) return null;
                     return (
-                        <div className="px-6 py-3 border-b border-slate-100 flex items-center gap-3">
-                            <span className="text-xs font-semibold text-slate-500">Filtrar por fornecedor:</span>
-                            <select
-                                value={filterFornecedor}
-                                onChange={e => setFilterFornecedor(e.target.value)}
-                                className="px-3 py-1.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#001A72] focus:bg-white transition-colors"
-                            >
-                                <option value="">Todos ({items.length})</option>
-                                {fornecedores.sort().map(f => (
-                                    <option key={f} value={f}>{f} ({items.filter(i => i.fornecedor === f).length})</option>
-                                ))}
-                            </select>
-                            {filterFornecedor && (
+                        <div className="px-6 py-3 border-b border-slate-100 flex flex-wrap items-center gap-4">
+                            {showFornecedor && (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs font-semibold text-slate-500">Fornecedor:</span>
+                                    <select
+                                        value={filterFornecedor}
+                                        onChange={e => setFilterFornecedor(e.target.value)}
+                                        className="px-3 py-1.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#001A72] focus:bg-white transition-colors"
+                                    >
+                                        <option value="">Todos ({items.length})</option>
+                                        {fornecedores.sort().map(f => (
+                                            <option key={f} value={f}>{f} ({items.filter(i => i.fornecedor === f).length})</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                            {showSituacao && (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs font-semibold text-slate-500">Situação:</span>
+                                    <select
+                                        value={filterSituacao}
+                                        onChange={e => setFilterSituacao(e.target.value)}
+                                        className="px-3 py-1.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#001A72] focus:bg-white transition-colors"
+                                    >
+                                        <option value="">Todas</option>
+                                        <option value="atendido">Atendido</option>
+                                        <option value="parcial">Parcial</option>
+                                        <option value="nao_atendido">Não atendido</option>
+                                    </select>
+                                </div>
+                            )}
+                            {(filterFornecedor || filterSituacao) && (
                                 <button
-                                    onClick={() => setFilterFornecedor('')}
+                                    onClick={() => { setFilterFornecedor(''); setFilterSituacao(''); }}
                                     className="text-xs text-slate-400 hover:text-red-500 transition-colors flex items-center gap-1"
                                 >
-                                    <X className="w-3 h-3" /> Limpar
+                                    <X className="w-3 h-3" /> Limpar filtros
                                 </button>
                             )}
                         </div>
@@ -1475,7 +1503,7 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
 
                 {/* Item table */}
                 <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-slate-100 text-sm">
+                    <table className="min-w-full divide-y divide-slate-100 text-xs">
                         <thead className="bg-slate-50">
                             <tr>
                                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase w-8">#</th>
@@ -1486,6 +1514,9 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Remanejamento</th>
                                 {status !== 'Pendente' && status !== 'Aguardando Aprovação' && (
                                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Fornecedor</th>
+                                )}
+                                {status !== 'Pendente' && status !== 'Aguardando Aprovação' && (
+                                    <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Vlr Unit.</th>
                                 )}
                                 {status !== 'Pendente' && (
                                     <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Qtd Atendida</th>
@@ -1511,9 +1542,9 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-100">
                             {(() => {
-                                const displayItems = filterFornecedor
-                                    ? items.filter(i => i.fornecedor === filterFornecedor)
-                                    : items;
+                                let displayItems = items;
+                                if (filterFornecedor) displayItems = displayItems.filter(i => i.fornecedor === filterFornecedor);
+                                if (filterSituacao) displayItems = displayItems.filter(i => getSituacao(i.quantidade_atendida, i.quantidade) === filterSituacao);
                                 return displayItems.length === 0 ? (
                                 <tr>
                                     <td colSpan={12} className="px-6 py-10 text-center text-slate-500">
@@ -1611,6 +1642,12 @@ export default function PedidoDetail({ id, currentUser }: PedidoDetailProps) {
                                         {status !== 'Pendente' && status !== 'Aguardando Aprovação' && (
                                             <td className="px-4 py-3.5 text-xs text-slate-600 max-w-[160px] truncate" title={item.fornecedor || ''}>
                                                 {item.fornecedor || '—'}
+                                            </td>
+                                        )}
+
+                                        {status !== 'Pendente' && status !== 'Aguardando Aprovação' && (
+                                            <td className="px-4 py-3.5 text-right text-xs text-slate-700 font-medium">
+                                                {item.valor_unitario ? `R$ ${item.valor_unitario.toFixed(2).replace('.', ',')}` : '—'}
                                             </td>
                                         )}
 
