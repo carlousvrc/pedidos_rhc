@@ -45,11 +45,10 @@ BEGIN
 END $$;
 
 
--- ── 3. UNIQUE EM itens.codigo ──────────────────────────────────────────────
--- O PDF faz match por código, duplicatas causam problemas de importação
--- Usa index unique condicional para ignorar nulos/vazios
-CREATE UNIQUE INDEX IF NOT EXISTS idx_itens_codigo_unique
-    ON itens(codigo) WHERE codigo IS NOT NULL AND codigo != '';
+-- ── 3. INDEX EM itens.codigo ────────────────────────────────────────────────
+-- O PDF faz match por código — index para acelerar buscas (não unique pois
+-- o catálogo possui itens com mesmo código em tipos/referências diferentes)
+CREATE INDEX IF NOT EXISTS idx_itens_codigo ON itens(codigo);
 
 
 -- ── 4. UNIQUE EM numero_pedido ─────────────────────────────────────────────
