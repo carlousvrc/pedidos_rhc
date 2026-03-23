@@ -19,7 +19,10 @@ export interface RelatorioData {
     taxaRecebimento: number;
     totalRemanejamentos: number;
     totalQtdRemanejada: number;
-    topItens: { nome: string; codigo: string; qtd: number }[];
+    valorTotalSolicitado: number;
+    valorTotalAtendido: number;
+    valorTotalRecebido: number;
+    topItens: { nome: string; codigo: string; qtd: number; valor_unitario: number; valor_total: number }[];
     pedidosPorUnidade: [string, number][];
     itensParcialmenteAtendidos: {
         item_nome: string;
@@ -56,6 +59,10 @@ export interface RelatorioData {
 function formatDate(iso: string) {
     if (!iso) return '—';
     return new Date(iso + 'T00:00:00').toLocaleDateString('pt-BR');
+}
+
+function fmtBRL(v: number) {
+    return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 function geradoEm() {
@@ -174,6 +181,8 @@ export async function exportPDF(data: RelatorioData) {
             ['Recebidos', data.recebidos.toString(), 'Remanejamentos', data.totalRemanejamentos.toString()],
             ['Total Qtd Solicitada', data.totalItensQtd.toLocaleString('pt-BR'), 'Total Qtd Atendida', data.totalAtendida.toLocaleString('pt-BR')],
             ['Taxa de Atendimento', `${data.taxaAtendimento}%`, 'Taxa de Recebimento', `${data.taxaRecebimento}%`],
+            ['Valor Solicitado', fmtBRL(data.valorTotalSolicitado), 'Valor Atendido', fmtBRL(data.valorTotalAtendido)],
+            ['Valor Recebido', fmtBRL(data.valorTotalRecebido), 'Diferença não atendida', fmtBRL(data.valorTotalSolicitado - data.valorTotalAtendido)],
         ],
         headStyles: { fillColor: PRIMARY, textColor: WHITE, fontStyle: 'bold', fontSize: 8 },
         bodyStyles: { fontSize: 8, textColor: SECONDARY },
@@ -252,19 +261,23 @@ export async function exportPDF(data: RelatorioData) {
         autoTable(doc, {
             startY: y,
             margin: { left: margin, right: margin },
-            head: [['#', 'Item', 'Código', 'Qtd Total']],
+            head: [['#', 'Item', 'Código', 'Qtd Total', 'Vlr Unit.', 'Vlr Total']],
             body: data.topItens.map((item, i) => [
                 (i + 1).toString(),
                 item.nome,
                 item.codigo,
                 item.qtd.toLocaleString('pt-BR'),
+                item.valor_unitario ? fmtBRL(item.valor_unitario) : '—',
+                item.valor_total ? fmtBRL(item.valor_total) : '—',
             ]),
             headStyles: { fillColor: PRIMARY, textColor: WHITE, fontStyle: 'bold', fontSize: 8 },
             bodyStyles: { fontSize: 8, textColor: SECONDARY },
             alternateRowStyles: { fillColor: LIGHT },
             columnStyles: {
                 0: { halign: 'center', cellWidth: 10 },
-                3: { halign: 'right', cellWidth: 24 },
+                3: { halign: 'right', cellWidth: 20 },
+                4: { halign: 'right', cellWidth: 22 },
+                5: { halign: 'right', cellWidth: 24 },
             },
             theme: 'grid',
         });
@@ -657,22 +670,49 @@ export async function exportExcel(data: RelatorioData) {
         r.getCell(3).alignment = xlAlign('center');
     });
 
+    wsResumo.addRow([]);
+
+    // Valores Financeiros
+    if (data.valorTotalSolicitado > 0) {
+        sectionRow(wsResumo, 'VALORES FINANCEIROS', 4);
+        const valHeader = wsResumo.addRow(['Indicador', 'Valor (R$)', 'Indicador', 'Valor (R$)']);
+        valHeader.height = 16;
+        [1,2,3,4].forEach(i => applyColHeader(valHeader.getCell(i), i % 2 === 0 ? 'right' : 'left'));
+
+        const valRows = [
+            ['Valor Solicitado', fmtBRL(data.valorTotalSolicitado), 'Valor Atendido', fmtBRL(data.valorTotalAtendido)],
+            ['Valor Recebido', fmtBRL(data.valorTotalRecebido), 'Diferença não atendida', fmtBRL(data.valorTotalSolicitado - data.valorTotalAtendido)],
+        ];
+        valRows.forEach((row) => {
+            const r = wsResumo.addRow(row);
+            r.height = 15;
+            r.getCell(1).fill = xlFill('EFF6FF'); r.getCell(1).font = xlFont(true, 9, SLATE600.replace('FF',''));
+            r.getCell(2).font = xlFont(true, 11, PRIMARY); r.getCell(2).alignment = xlAlign('right');
+            if (row[2]) {
+                r.getCell(3).fill = xlFill('EFF6FF'); r.getCell(3).font = xlFont(true, 9, SLATE600.replace('FF',''));
+                r.getCell(4).font = xlFont(true, 11, PRIMARY); r.getCell(4).alignment = xlAlign('right');
+            }
+        });
+    }
+
     // ── Aba: Top Itens ───────────────────────────────────────
     const wsTop = wb.addWorksheet('Top Itens');
-    wsTop.columns = [{ width: 6 }, { width: 50 }, { width: 18 }, { width: 14 }];
-    addPageHeader(wsTop, 4);
-    sectionRow(wsTop, 'TOP 10 ITENS MAIS SOLICITADOS', 4);
-    const topH = wsTop.addRow(['#', 'Item', 'Código', 'Qtd Total']);
+    wsTop.columns = [{ width: 6 }, { width: 44 }, { width: 16 }, { width: 12 }, { width: 16 }, { width: 18 }];
+    addPageHeader(wsTop, 6);
+    sectionRow(wsTop, 'TOP 10 ITENS MAIS SOLICITADOS', 6);
+    const topH = wsTop.addRow(['#', 'Item', 'Código', 'Qtd Total', 'Vlr Unit.', 'Vlr Total']);
     topH.height = 16;
-    [1,2,3,4].forEach((i) => applyColHeader(topH.getCell(i), i === 2 ? 'left' : 'center'));
+    [1,2,3,4,5,6].forEach((i) => applyColHeader(topH.getCell(i), i === 2 ? 'left' : 'center'));
     data.topItens.forEach((item, i) => {
         const alt = i % 2 === 0;
-        const r = wsTop.addRow([i + 1, item.nome, item.codigo, item.qtd]);
+        const r = wsTop.addRow([i + 1, item.nome, item.codigo, item.qtd, item.valor_unitario ? fmtBRL(item.valor_unitario) : '—', item.valor_total ? fmtBRL(item.valor_total) : '—']);
         r.height = 14;
         applyRow(r.getCell(1), alt, 'center', true, i === 0 ? 'FF' + PRIMARY : SLATE600);
         applyRow(r.getCell(2), alt, 'left');
         applyRow(r.getCell(3), alt, 'center', false, SLATE600);
         applyRow(r.getCell(4), alt, 'right', true, 'FF' + PRIMARY);
+        applyRow(r.getCell(5), alt, 'right', false, SLATE600);
+        applyRow(r.getCell(6), alt, 'right', true, GREEN700.replace('FF', ''));
     });
 
     // ── Aba: Por Unidade ─────────────────────────────────────

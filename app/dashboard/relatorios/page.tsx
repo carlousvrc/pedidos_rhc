@@ -227,6 +227,9 @@ export default function RelatoriosPage() {
             totalRecebida,
             taxaAtendimento,
             taxaRecebimento,
+            valorTotalSolicitado,
+            valorTotalAtendido,
+            valorTotalRecebido,
             totalRemanejamentos,
             totalQtdRemanejada,
             topItens,
@@ -285,15 +288,20 @@ export default function RelatoriosPage() {
         const txAtend  = totQtd > 0 ? Math.round((totAtend / totQtd) * 100) : 0;
         const txRec    = totAtend > 0 ? Math.round((totRec / totAtend) * 100) : 0;
 
+        const vlrSol  = filteredI.reduce((s, i) => s + (i.valor_unitario || 0) * i.quantidade, 0);
+        const vlrAt   = filteredI.reduce((s, i) => s + (i.valor_unitario || 0) * i.quantidade_atendida, 0);
+        const vlrRec  = filteredI.reduce((s, i) => s + (i.valor_unitario || 0) * i.quantidade_recebida, 0);
+
         const alertPedIds = new Set(filteredP.filter(p => p.status === 'Realizado' || p.status === 'Recebido').map(p => p.id));
         const naoAtend    = filteredI.filter(pi => alertPedIds.has(pi.pedido_id) && pi.quantidade_atendida === 0);
         const parcAtend   = filteredI.filter(pi => alertPedIds.has(pi.pedido_id) && pi.quantidade_atendida > 0 && pi.quantidade_atendida < pi.quantidade);
 
-        const topMap = new Map<string, { nome: string; codigo: string; qtd: number }>();
+        const topMap = new Map<string, { nome: string; codigo: string; qtd: number; valor_unitario: number; valor_total: number }>();
         for (const pi of filteredI) {
+            const vu = pi.valor_unitario || 0;
             const ex = topMap.get(pi.item_id);
-            if (ex) ex.qtd += pi.quantidade;
-            else topMap.set(pi.item_id, { nome: pi.item_nome || '—', codigo: pi.item_codigo || '—', qtd: pi.quantidade });
+            if (ex) { ex.qtd += pi.quantidade; ex.valor_total += vu * pi.quantidade; if (!ex.valor_unitario && vu) ex.valor_unitario = vu; }
+            else topMap.set(pi.item_id, { nome: pi.item_nome || '—', codigo: pi.item_codigo || '—', qtd: pi.quantidade, valor_unitario: vu, valor_total: vu * pi.quantidade });
         }
         const top10 = Array.from(topMap.values()).sort((a, b) => b.qtd - a.qtd).slice(0, 10);
 
@@ -315,6 +323,9 @@ export default function RelatoriosPage() {
             totalRecebida: totRec,
             taxaAtendimento: txAtend,
             taxaRecebimento: txRec,
+            valorTotalSolicitado: vlrSol,
+            valorTotalAtendido: vlrAt,
+            valorTotalRecebido: vlrRec,
             totalRemanejamentos,
             totalQtdRemanejada,
             topItens: top10,
