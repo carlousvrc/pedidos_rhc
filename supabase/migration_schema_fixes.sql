@@ -54,7 +54,7 @@ CREATE INDEX IF NOT EXISTS idx_itens_codigo ON itens(codigo);
 -- ── 4. UNIQUE EM numero_pedido ─────────────────────────────────────────────
 -- Evita pedidos duplicados com mesmo número
 CREATE UNIQUE INDEX IF NOT EXISTS idx_pedidos_numero_unique
-    ON pedidos(numero_pedido) WHERE numero_pedido IS NOT NULL AND numero_pedido != '';
+    ON pedidos(numero_pedido) WHERE numero_pedido IS NOT NULL;
 
 
 -- ── 5. CAMPO updated_at EM pedidos ─────────────────────────────────────────
